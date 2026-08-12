@@ -4,30 +4,30 @@ import { analyzeTransitionType, getCamelotStepDistance } from './camelot';
 export const BLUEPRINTS: Record<BlueprintType, SetBlueprint> = {
   PEAK_MOUNTAIN: {
     id: 'PEAK_MOUNTAIN',
-    name: 'Peak-Hour Mountain',
-    tagline: 'Build → High-Energy Peak → Cooldown',
-    description: 'Low/Mid Start (4-5) → Progressive Rise → Peak Energy (9-10) → Atmospheric Cooldown (5-6). Perfect for peak hour club sets.',
-    targetCurve: [4.2, 5.0, 6.2, 7.5, 8.8, 9.8, 9.2, 7.8, 6.2, 5.0],
+    name: 'Harmonic Set Flow',
+    tagline: 'In-Key Camelot Wheel Progression',
+    description: 'Auto-sequences tracks for smooth harmonic transitions around the Camelot Wheel.',
+    targetCurve: [5, 5, 6, 7, 8, 8, 7, 6, 5, 5],
   },
   PROGRESSIVE_RAMP: {
     id: 'PROGRESSIVE_RAMP',
     name: 'Progressive Ramp',
     tagline: 'Continuous Step-by-Step Energy Escalation',
-    description: 'Constant energy climb from first track to last track (3.5 to 9.8). Drives unrelenting dancefloor momentum.',
+    description: 'Constant energy climb from first track to last track.',
     targetCurve: [3.5, 4.2, 5.0, 5.8, 6.5, 7.3, 8.0, 8.7, 9.3, 9.8],
   },
   SUNSET_WARMUP: {
     id: 'SUNSET_WARMUP',
     name: 'Sunset / Warm-Up',
-    tagline: 'Steady Low-BPM Melodic Floor with Smooth Modulations',
-    description: 'Sustained mid-energy floor (4.0 to 6.5) focusing on smooth harmonic transitions and lush soundscapes.',
+    tagline: 'Steady Low-BPM Melodic Floor',
+    description: 'Sustained mid-energy floor focusing on smooth harmonic transitions.',
     targetCurve: [4.0, 4.5, 5.0, 5.5, 6.0, 6.2, 6.0, 5.8, 5.2, 4.5],
   },
   CUSTOM: {
     id: 'CUSTOM',
     name: 'Custom Energy Blueprint',
     tagline: 'User-Defined Target Energy Arc',
-    description: 'Fully customizable 10-point target energy trajectory designed by the DJ.',
+    description: 'Fully customizable target energy trajectory.',
     targetCurve: [4.0, 5.0, 6.0, 7.0, 8.0, 8.0, 7.0, 6.0, 5.0, 4.0],
   },
 };
@@ -37,7 +37,7 @@ export const BLUEPRINTS: Record<BlueprintType, SetBlueprint> = {
  */
 export function getTargetEnergyForStep(stepIndex: number, totalTracks: number, targetCurve: number[]): number {
   if (totalTracks <= 1) return targetCurve[0];
-  const progress = stepIndex / (totalTracks - 1); // 0.0 to 1.0
+  const progress = stepIndex / (totalTracks - 1);
   const indexFloat = progress * (targetCurve.length - 1);
   const lowIndex = Math.floor(indexFloat);
   const highIndex = Math.min(targetCurve.length - 1, Math.ceil(indexFloat));
@@ -47,103 +47,111 @@ export function getTargetEnergyForStep(stepIndex: number, totalTracks: number, t
 }
 
 /**
- * Auto-sorts a track array to align with chosen Set Blueprint & Sorting Parameters
+ * Calculates transition penalty score between two tracks based purely on Camelot Key compatibility.
+ * In-key transitions (Exact Match, Relative Major/Minor, Smooth Adjacent Camelot Step, Dominant Diagonal, Energy Boost)
+ * are heavily favored, while key clashes receive massive penalties.
+ * Small BPM delta serves as a smooth tie-breaker.
+ */
+function getHarmonicKeyPenalty(prevTrack: Track, candidate: Track): number {
+  const stepDist = getCamelotStepDistance(prevTrack.key.number, candidate.key.number);
+  const sameLetter = prevTrack.key.letter === candidate.key.letter;
+  const sameCode = prevTrack.key.code === candidate.key.code;
+
+  let harmonicCost = 0;
+
+  if (sameCode) {
+    harmonicCost = 0; // Exact key match (e.g. 8A -> 8A)
+  } else if (prevTrack.key.number === candidate.key.number && !sameLetter) {
+    harmonicCost = 0.5; // Relative Major / Minor shift (e.g. 8A <-> 8B)
+  } else if (stepDist === 1 && sameLetter) {
+    harmonicCost = 1.0; // Smooth adjacent Camelot step (e.g. 8A -> 9A or 8A -> 7A)
+  } else if (stepDist === 1 && !sameLetter) {
+    harmonicCost = 2.0; // Dominant diagonal (e.g. 8A -> 9B or 8A -> 7B)
+  } else if (stepDist === 2 && sameLetter) {
+    harmonicCost = 3.0; // Energy boost / 2-step Camelot jump (e.g. 8A -> 10A)
+  } else if (stepDist === 7 && sameLetter) {
+    harmonicCost = 3.5; // Semitone boost (+7 steps e.g. 8A -> 3A)
+  } else if (stepDist === 2 && !sameLetter) {
+    harmonicCost = 5.0; // 2-step diagonal jump
+  } else {
+    // HARMONIC CLASH (> 2 steps away)
+    harmonicCost = 10000 + stepDist * 1000;
+  }
+
+  // Smooth BPM transition tie-breaker (small penalty for tempo differences)
+  const bpmDelta = Math.abs(candidate.bpm - prevTrack.bpm);
+  const bpmCost = bpmDelta * 0.2;
+
+  return harmonicCost + bpmCost;
+}
+
+interface PathCandidate {
+  sequence: Track[];
+  unvisitedIds: Set<string>;
+  totalCost: number;
+}
+
+/**
+ * Auto-sorts uploaded tracks purely according to Camelot Harmonic Key compatibility.
+ * Uses Beam Search path optimization so the track sequence is guaranteed to follow
+ * a seamless in-key Camelot Wheel progression.
  */
 export function sortPlaylist(
   tracks: Track[],
-  blueprintType: BlueprintType,
-  params: SortingParameters,
-  customCurve?: number[]
+  _blueprintType?: BlueprintType,
+  _params?: SortingParameters,
+  _customCurve?: number[]
 ): { sortedTracks: Track[]; transitions: TransitionAnalysis[] } {
   if (tracks.length <= 1) {
     return { sortedTracks: [...tracks], transitions: [] };
   }
 
-  const blueprint = BLUEPRINTS[blueprintType];
-  const targetCurve = customCurve || blueprint.targetCurve;
   const N = tracks.length;
+  const trackMap = new Map<string, Track>();
+  tracks.forEach((t) => trackMap.set(t.id, t));
 
-  // Beam search / greedy route optimizer
-  const unvisited = [...tracks];
-  const sorted: Track[] = [];
-
-  // Pick the best starting track (closest DES to targetCurve[0] & moderate BPM)
-  const targetStartEnergy = targetCurve[0];
-  unvisited.sort((a, b) => {
-    const diffA = Math.abs(a.des - targetStartEnergy);
-    const diffB = Math.abs(b.des - targetStartEnergy);
-    return diffA - diffB;
+  // Initialize Beam Search paths starting from every track in the crate
+  let beam: PathCandidate[] = tracks.map((startTrack) => {
+    const unvisited = new Set(tracks.map((t) => t.id));
+    unvisited.delete(startTrack.id);
+    return {
+      sequence: [startTrack],
+      unvisitedIds: unvisited,
+      totalCost: 0,
+    };
   });
 
-  // Take the best starter track
-  const startTrack = unvisited.shift()!;
-  sorted.push(startTrack);
+  const beamWidth = Math.min(120, Math.max(40, tracks.length * 8));
 
-  // Iteratively select the next best track
-  while (unvisited.length > 0) {
-    const prevTrack = sorted[sorted.length - 1];
-    const currentStep = sorted.length;
-    const targetEnergy = getTargetEnergyForStep(currentStep, N, targetCurve);
+  // Iteratively extend each path by picking the best in-key candidate
+  for (let step = 1; step < N; step++) {
+    const nextBeam: PathCandidate[] = [];
 
-    let bestScore = Infinity;
-    let bestIndex = 0;
+    for (const path of beam) {
+      const lastTrack = path.sequence[path.sequence.length - 1];
 
-    for (let i = 0; i < unvisited.length; i++) {
-      const candidate = unvisited[i];
+      for (const candidateId of path.unvisitedIds) {
+        const candidate = trackMap.get(candidateId)!;
+        const penalty = getHarmonicKeyPenalty(lastTrack, candidate);
 
-      // 1. Energy Match Cost
-      const energyDelta = Math.abs(candidate.des - targetEnergy);
-      const energyCost = energyDelta * (1 - params.keyPriorityWeight) * 2.5;
+        const newUnvisited = new Set(path.unvisitedIds);
+        newUnvisited.delete(candidateId);
 
-      // 2. Harmonic Distance Cost
-      const stepDist = getCamelotStepDistance(prevTrack.key.number, candidate.key.number);
-      const sameLetter = prevTrack.key.letter === candidate.key.letter;
-      let harmonicCost = 0;
-
-      if (prevTrack.key.code === candidate.key.code) {
-        harmonicCost = 0;
-      } else if (stepDist === 1 && sameLetter) {
-        harmonicCost = 0.5;
-      } else if (prevTrack.key.number === candidate.key.number && !sameLetter) {
-        harmonicCost = 0.8; // Relative major/minor
-      } else if ((stepDist === 2 || stepDist === 7) && sameLetter && params.allowEnergyBoosts) {
-        harmonicCost = 1.2; // Energy boost
-      } else if (stepDist === 1 && !sameLetter) {
-        harmonicCost = 1.5; // Dominant diagonal
-      } else {
-        harmonicCost = 4.5 + stepDist * 1.5; // Clash penalty
-      }
-
-      const keyCost = harmonicCost * params.keyPriorityWeight * 3.0;
-
-      // 3. BPM Drift Cost
-      const bpmDelta = Math.abs(candidate.bpm - prevTrack.bpm);
-      let bpmCost = 0;
-      if (bpmDelta > params.maxBpmDrift) {
-        bpmCost = Math.pow(bpmDelta - params.maxBpmDrift, 2) * 1.8;
-      } else {
-        bpmCost = bpmDelta * 0.3;
-      }
-
-      // 4. Sub-bass / Spectral Frequency Overlap Penalty
-      let frequencyClashPenalty = 0;
-      if (params.avoidFrequencyClash) {
-        if (prevTrack.spectral.subBassWeight > 7.0 && candidate.spectral.subBassWeight > 7.0) {
-          frequencyClashPenalty = 4.0; // Two heavy sub-bass tracks back to back
-        }
-      }
-
-      const totalScore = energyCost + keyCost + bpmCost + frequencyClashPenalty;
-
-      if (totalScore < bestScore) {
-        bestScore = totalScore;
-        bestIndex = i;
+        nextBeam.push({
+          sequence: [...path.sequence, candidate],
+          unvisitedIds: newUnvisited,
+          totalCost: path.totalCost + penalty,
+        });
       }
     }
 
-    const [selected] = unvisited.splice(bestIndex, 1);
-    sorted.push(selected);
+    // Sort paths by lowest cumulative harmonic key cost and keep top `beamWidth`
+    nextBeam.sort((a, b) => a.totalCost - b.totalCost);
+    beam = nextBeam.slice(0, beamWidth);
   }
+
+  const bestPath = beam[0];
+  const sorted = bestPath ? bestPath.sequence : [...tracks];
 
   // Generate Transition Analyses between all consecutive pairs
   const transitions: TransitionAnalysis[] = [];

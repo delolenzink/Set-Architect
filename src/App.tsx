@@ -45,8 +45,8 @@ export default function App() {
   const [customCurve, setCustomCurve] = useState<number[]>([4, 5, 6, 7, 8, 9, 8, 7, 6, 5]);
 
   const [params, setParams] = useState<SortingParameters>({
-    maxBpmDrift: 3,
-    keyPriorityWeight: 0.65,
+    maxBpmDrift: 4,
+    keyPriorityWeight: 1.0,
     avoidFrequencyClash: true,
     allowEnergyBoosts: true,
     strictMode: true,

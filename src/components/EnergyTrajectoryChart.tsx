@@ -57,10 +57,10 @@ export const EnergyTrajectoryChart: React.FC<EnergyTrajectoryChartProps> = ({
           </div>
           <div>
             <h3 className="text-sm font-bold text-slate-100 uppercase tracking-wider font-mono">
-              DYNAMIC ENERGY CURVE PROFILING (DES)
+              HARMONIC & ENERGY SEQUENCE PROFILE
             </h3>
             <p className="text-xs text-slate-400">
-              Target blueprint arc vs auto-arranged playlist track percussive/sub-bass energy
+              Energy trajectory across the auto-sorted harmonic key sequence
             </p>
           </div>
         </div>

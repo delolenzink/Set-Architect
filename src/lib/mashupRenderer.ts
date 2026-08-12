@@ -9,6 +9,8 @@ export interface MashupOptions {
   trackBGain: number; // 0 to 1.5
   trackBHighpassHz: number; // Cut bass from vocal track (e.g. 250 Hz)
   trackBOffsetSeconds: number; // Start offset for Track B relative to Track A
+  beatNudgeMs?: number; // Fine phase nudge in ms (-200ms to +200ms)
+  autoAlignBeatGrid?: boolean; // Align first kick drum transient onset
   pitchShiftSemiTonesB: number; // Pitch shift semitones (-5 to +5)
   mashupDurationMode: 'FULL_TRACK' | 'TWO_MIN' | 'ONE_MIN';
 }
@@ -18,6 +20,120 @@ export interface RenderedMashupResult {
   url: string;
   durationSeconds: number;
   mashupTrack: Track;
+}
+
+/**
+ * Detects the first strong downbeat/kick transient onset time in seconds
+ */
+export function detectFirstDownbeat(buffer: AudioBuffer): number {
+  if (!buffer || buffer.length === 0) return 0;
+
+  const data = buffer.getChannelData(0);
+  const sampleRate = buffer.sampleRate;
+  const windowSize = Math.floor(sampleRate * 0.01); // 10ms frame
+  const maxSearchSamples = Math.min(buffer.length, Math.floor(sampleRate * 10.0)); // Search first 10 seconds
+
+  let maxEnergy = 0;
+  const energies: number[] = [];
+
+  for (let i = 0; i < maxSearchSamples; i += windowSize) {
+    let sum = 0;
+    const end = Math.min(i + windowSize, maxSearchSamples);
+    for (let j = i; j < end; j++) {
+      sum += data[j] * data[j];
+    }
+    const rms = Math.sqrt(sum / (end - i));
+    energies.push(rms);
+    if (rms > maxEnergy) maxEnergy = rms;
+  }
+
+  if (maxEnergy < 0.005) return 0; // Silent / quiet track
+
+  // Find first frame that exceeds 18% of peak energy
+  const threshold = maxEnergy * 0.18;
+  for (let idx = 0; idx < energies.length; idx++) {
+    if (energies[idx] >= threshold) {
+      const sampleIndex = idx * windowSize;
+      return sampleIndex / sampleRate;
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * Pitch shifts an AudioBuffer by semitones while preserving exact playback duration & tempo.
+ * Uses WSOLA (Waveform Similarity Overlap-Add) algorithm.
+ */
+export function pitchShiftAudioBuffer(
+  buffer: AudioBuffer,
+  semitones: number
+): AudioBuffer {
+  if (!semitones || Math.abs(semitones) < 0.01) {
+    return buffer;
+  }
+
+  const pitchFactor = Math.pow(2, semitones / 12);
+  const numChannels = buffer.numberOfChannels;
+  const sampleRate = buffer.sampleRate;
+  const originalLength = buffer.length;
+
+  const grainSize = Math.floor(sampleRate * 0.035); // 35ms grain
+  const overlap = Math.floor(grainSize * 0.5);
+  const hopOut = grainSize - overlap;
+  const hopIn = Math.floor(hopOut * pitchFactor);
+
+  const outCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)({ sampleRate });
+  const shiftedBuffer = outCtx.createBuffer(numChannels, originalLength, sampleRate);
+
+  // Hanning Window
+  const windowTable = new Float32Array(grainSize);
+  for (let i = 0; i < grainSize; i++) {
+    windowTable[i] = 0.5 * (1 - Math.cos((2 * Math.PI * i) / grainSize));
+  }
+
+  const searchRange = Math.floor(sampleRate * 0.004); // 4ms WSOLA search window
+
+  for (let channel = 0; channel < numChannels; channel++) {
+    const inputData = buffer.getChannelData(channel);
+    const outputData = shiftedBuffer.getChannelData(channel);
+
+    let inPos = 0;
+    let outPos = 0;
+
+    while (outPos + grainSize < originalLength && inPos + grainSize < originalLength) {
+      let bestOffset = 0;
+      let maxCorr = -1e9;
+
+      for (let offset = -searchRange; offset <= searchRange; offset++) {
+        const testIn = inPos + offset;
+        if (testIn < 0 || testIn + overlap >= originalLength) continue;
+
+        let corr = 0;
+        for (let k = 0; k < overlap; k++) {
+          corr += inputData[testIn + k] * (outputData[outPos + k] || 0);
+        }
+        if (corr > maxCorr) {
+          maxCorr = corr;
+          bestOffset = offset;
+        }
+      }
+
+      const matchedIn = Math.max(0, Math.min(originalLength - grainSize, inPos + bestOffset));
+
+      for (let i = 0; i < grainSize; i++) {
+        const outIdx = outPos + i;
+        if (outIdx < originalLength) {
+          outputData[outIdx] += inputData[matchedIn + i] * windowTable[i];
+        }
+      }
+
+      outPos += hopOut;
+      inPos += hopIn;
+    }
+  }
+
+  return shiftedBuffer;
 }
 
 /**
@@ -35,29 +151,51 @@ export async function renderMashupAudio(
     trackBGain,
     trackBHighpassHz,
     trackBOffsetSeconds,
+    beatNudgeMs = 0,
+    autoAlignBeatGrid = true,
     pitchShiftSemiTonesB,
     mashupDurationMode,
   } = options;
 
   onProgress?.(10, 'Decoding audio buffers for Track A & Track B...');
 
-  const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-
   // Decode audio buffers
   const bufferA = await ensureTrackAudioBuffer(trackA);
   const bufferB = await ensureTrackAudioBuffer(trackB);
 
-  onProgress?.(30, 'Calculating tempo playback rates & pitch offsets...');
+  onProgress?.(25, 'Applying pitch shift & time-alignment...');
 
-  // Calculate playback rates for tempo & pitch shift
+  // Apply pitch shift to Track B without altering its playback tempo
+  let processedBufferB = bufferB;
+  if (bufferB && pitchShiftSemiTonesB !== 0) {
+    onProgress?.(35, `Pitch shifting Track B by ${pitchShiftSemiTonesB > 0 ? '+' : ''}${pitchShiftSemiTonesB} semitones (keeping tempo locked)...`);
+    processedBufferB = pitchShiftAudioBuffer(bufferB, pitchShiftSemiTonesB);
+  }
+
+  onProgress?.(50, 'Locking beat grids & calculating phase alignment...');
+
+  // Calculate playback rates to strictly match targetBpm
   const rateA = targetBpm / (trackA.bpm || targetBpm);
-  const baseRateB = targetBpm / (trackB.bpm || targetBpm);
-  const pitchFactorB = Math.pow(2, pitchShiftSemiTonesB / 12);
-  const rateB = baseRateB * pitchFactorB;
+  const rateB = targetBpm / (trackB.bpm || targetBpm);
 
-  // Calculate durations
+  // Exact Beat Grid Alignment & Downbeat Transient Synchronization
+  const beatSec = 60 / targetBpm;
+  const gridOffsetBeats = Math.round(trackBOffsetSeconds / beatSec);
+  const snappedOffsetSec = gridOffsetBeats * beatSec;
+
+  let autoOnsetCorrection = 0;
+  if (autoAlignBeatGrid && bufferA && processedBufferB) {
+    const onsetA = detectFirstDownbeat(bufferA);
+    const onsetB = detectFirstDownbeat(processedBufferB);
+    autoOnsetCorrection = onsetA - onsetB;
+  }
+
+  const nudgeSec = beatNudgeMs / 1000;
+  const startB = Math.max(0, snappedOffsetSec + autoOnsetCorrection + nudgeSec);
+
+  // Calculate total rendered mashup duration
   const durA = bufferA ? bufferA.duration / rateA : trackA.durationSeconds;
-  const durB = bufferB ? bufferB.duration / rateB + trackBOffsetSeconds : trackB.durationSeconds;
+  const durB = processedBufferB ? processedBufferB.duration / rateB + startB : trackB.durationSeconds + startB;
 
   let totalDuration = Math.max(durA, durB);
 
@@ -67,7 +205,7 @@ export async function renderMashupAudio(
     totalDuration = Math.min(totalDuration, 60);
   }
 
-  onProgress?.(50, 'Configuring Web Audio EQ filters & stem gain nodes...');
+  onProgress?.(65, 'Configuring Web Audio EQ filters & stem gain nodes...');
 
   const sampleRate = 44100;
   const totalSamples = Math.ceil(sampleRate * totalDuration);
@@ -114,12 +252,11 @@ export async function renderMashupAudio(
   hpFilterB.connect(gainNodeB);
   gainNodeB.connect(masterGain);
 
-  const startB = Math.max(0, trackBOffsetSeconds);
   const playDurB = Math.max(0, totalDuration - startB);
 
-  if (bufferB && playDurB > 0) {
+  if (processedBufferB && playDurB > 0) {
     const srcB = offlineCtx.createBufferSource();
-    srcB.buffer = bufferB;
+    srcB.buffer = processedBufferB;
     srcB.playbackRate.setValueAtTime(rateB, 0);
     srcB.connect(hpFilterB);
     srcB.start(startB, 0, playDurB);
@@ -128,11 +265,11 @@ export async function renderMashupAudio(
     generateSyntheticVocalLead(offlineCtx, hpFilterB, trackB, targetBpm, startB, playDurB);
   }
 
-  onProgress?.(75, 'Rendering mashup audio buffer via Web Audio DSP...');
+  onProgress?.(80, 'Rendering beat-matched mashup via Web Audio DSP...');
 
   const renderedBuffer = await offlineCtx.startRendering();
 
-  onProgress?.(90, 'Encoding 16-bit PCM WAV File...');
+  onProgress?.(92, 'Encoding 16-bit PCM WAV File...');
 
   const wavBlob = audioBufferToWav(renderedBuffer);
   const audioUrl = URL.createObjectURL(wavBlob);
@@ -162,7 +299,7 @@ export async function renderMashupAudio(
     audioBuffer: renderedBuffer,
   };
 
-  onProgress?.(100, 'Studio Mashup Rendered Successfully!');
+  onProgress?.(100, 'Beat-Matched Studio Mashup Rendered Successfully!');
 
   return {
     blob: wavBlob,

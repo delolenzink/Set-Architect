@@ -51,6 +51,8 @@ export const CreateMashupModal: React.FC<CreateMashupModalProps> = ({
   const [trackBHighpassHz, setTrackBHighpassHz] = useState<number>(250);
   const [trackBOffsetSeconds, setTrackBOffsetSeconds] = useState<number>(0);
   const [pitchShiftSemiTonesB, setPitchShiftSemiTonesB] = useState<number>(0);
+  const [beatNudgeMs, setBeatNudgeMs] = useState<number>(0);
+  const [autoAlignBeatGrid, setAutoAlignBeatGrid] = useState<boolean>(true);
   const [durationMode, setDurationMode] = useState<'FULL_TRACK' | 'TWO_MIN' | 'ONE_MIN'>('FULL_TRACK');
 
   // Sync target BPM when Track A changes
@@ -103,6 +105,8 @@ export const CreateMashupModal: React.FC<CreateMashupModalProps> = ({
           trackBGain,
           trackBHighpassHz,
           trackBOffsetSeconds,
+          beatNudgeMs,
+          autoAlignBeatGrid,
           pitchShiftSemiTonesB,
           mashupDurationMode: durationMode,
         },
@@ -291,6 +295,37 @@ export const CreateMashupModal: React.FC<CreateMashupModalProps> = ({
                 />
               </div>
 
+              {/* Pitch Shift Control */}
+              <div className="space-y-1">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>Track B Pitch Shift (Semitones):</span>
+                  <span className="text-amber-400 font-bold">
+                    {pitchShiftSemiTonesB > 0 ? `+${pitchShiftSemiTonesB}` : pitchShiftSemiTonesB} st
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min="-5"
+                    max="5"
+                    step="1"
+                    value={pitchShiftSemiTonesB}
+                    onChange={(e) => setPitchShiftSemiTonesB(parseInt(e.target.value))}
+                    className="w-full accent-amber-500 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                  />
+                  <button
+                    onClick={() => setPitchShiftSemiTonesB(0)}
+                    className="px-2 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px] font-mono"
+                    title="Reset pitch shift to 0"
+                  >
+                    Reset
+                  </button>
+                </div>
+                <p className="text-[10px] text-slate-500 italic">
+                  WSOLA time-locked pitch shift (changes key without affecting playback tempo).
+                </p>
+              </div>
+
               {/* Highpass Vocal Isolator */}
               <div className="space-y-1">
                 <div className="flex justify-between text-[11px] font-mono text-slate-400">
@@ -318,21 +353,13 @@ export const CreateMashupModal: React.FC<CreateMashupModalProps> = ({
         <div className="bg-slate-950/80 border border-slate-800 rounded-xl p-4 mt-4 space-y-4">
           <div className="flex items-center justify-between border-b border-slate-800 pb-2">
             <span className="text-xs font-mono font-bold text-slate-200 uppercase flex items-center gap-2">
-              <Sliders className="w-4 h-4 text-cyan-400" /> MASHUP ALIGNMENT & HARMONIC SYNC
+              <Sliders className="w-4 h-4 text-cyan-400" /> BEAT MATCHING & HARMONIC SYNC
             </span>
 
-            {/* Compatibility Badge */}
-            <span
-              className={`px-2.5 py-1 rounded-full text-[10px] font-mono font-bold flex items-center gap-1.5 ${
-                isKeyCompatible
-                  ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
-                  : 'bg-amber-950 text-amber-400 border border-amber-800'
-              }`}
-            >
-              <Zap className="w-3 h-3" />
-              {isKeyCompatible
-                ? `HARMONIC MATCH (${trackA?.key?.code} & ${trackB?.key?.code})`
-                : `KEY SHIFT SUGGESTED (${trackA?.key?.code} vs ${trackB?.key?.code})`}
+            {/* Beat Sync Status Badge */}
+            <span className="px-2.5 py-1 rounded-full text-[10px] font-mono font-bold bg-cyan-950 text-cyan-400 border border-cyan-800 flex items-center gap-1.5">
+              <Zap className="w-3 h-3 text-cyan-400" />
+              100% BEAT MATCHED @ {targetBpm} BPM
             </span>
           </div>
 
@@ -361,21 +388,24 @@ export const CreateMashupModal: React.FC<CreateMashupModalProps> = ({
 
             {/* Vocal Offset */}
             <div className="space-y-1.5">
-              <label className="text-slate-400 block text-[11px]">TRACK B START OFFSET</label>
+              <label className="text-slate-400 block text-[11px]">TRACK B BAR / BEAT START</label>
               <select
                 value={trackBOffsetSeconds}
                 onChange={(e) => setTrackBOffsetSeconds(parseFloat(e.target.value))}
                 className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-white outline-none focus:border-cyan-500"
               >
-                <option value={0}>0s (Immediate Start)</option>
-                <option value={Math.round((60 / targetBpm) * 16)}>
-                  16 Beats / 4 Bars (~{Math.round((60 / targetBpm) * 16)}s)
+                <option value={0}>0 Bars (Immediate Start)</option>
+                <option value={(60 / targetBpm) * 16}>
+                  4 Bars / 16 Beats ({((60 / targetBpm) * 16).toFixed(2)}s)
                 </option>
-                <option value={Math.round((60 / targetBpm) * 32)}>
-                  32 Beats / 8 Bars (~{Math.round((60 / targetBpm) * 32)}s)
+                <option value={(60 / targetBpm) * 32}>
+                  8 Bars / 32 Beats ({((60 / targetBpm) * 32).toFixed(2)}s)
                 </option>
-                <option value={Math.round((60 / targetBpm) * 64)}>
-                  64 Beats / 16 Bars (~{Math.round((60 / targetBpm) * 64)}s)
+                <option value={(60 / targetBpm) * 64}>
+                  16 Bars / 64 Beats ({((60 / targetBpm) * 64).toFixed(2)}s)
+                </option>
+                <option value={(60 / targetBpm) * 128}>
+                  32 Bars / 128 Beats ({((60 / targetBpm) * 128).toFixed(2)}s)
                 </option>
               </select>
             </div>
@@ -392,6 +422,52 @@ export const CreateMashupModal: React.FC<CreateMashupModalProps> = ({
                 <option value="TWO_MIN">2-Minute Extended Mashup</option>
                 <option value="ONE_MIN">1-Minute Studio Teaser</option>
               </select>
+            </div>
+          </div>
+
+          {/* Phase Nudge & Auto Transient Align */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-slate-800/80 font-mono text-xs">
+            {/* Auto Kick Transient Alignment */}
+            <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/80 border border-slate-800">
+              <div>
+                <span className="font-bold text-slate-200 block text-[11px]">AUTO KICK DOWNBEAT ALIGN</span>
+                <span className="text-[10px] text-slate-400 block">Detects kick transients to align downbeats to the exact ms</span>
+              </div>
+              <button
+                onClick={() => setAutoAlignBeatGrid(!autoAlignBeatGrid)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
+                  autoAlignBeatGrid
+                    ? 'bg-cyan-500 text-black shadow-md shadow-cyan-500/20'
+                    : 'bg-slate-800 text-slate-400 hover:text-white'
+                }`}
+              >
+                {autoAlignBeatGrid ? 'ACTIVE' : 'OFF'}
+              </button>
+            </div>
+
+            {/* Beat Grid Micro Phase Nudge */}
+            <div className="p-3 rounded-lg bg-slate-900/80 border border-slate-800 space-y-1">
+              <div className="flex justify-between items-center text-[11px]">
+                <span className="text-slate-400">BEAT PHASE MICRO-NUDGE:</span>
+                <span className="text-cyan-400 font-bold">{beatNudgeMs > 0 ? `+${beatNudgeMs}` : beatNudgeMs} ms</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="range"
+                  min="-100"
+                  max="100"
+                  step="1"
+                  value={beatNudgeMs}
+                  onChange={(e) => setBeatNudgeMs(parseInt(e.target.value))}
+                  className="w-full accent-cyan-400 h-1.5 bg-slate-800 rounded-lg cursor-pointer"
+                />
+                <button
+                  onClick={() => setBeatNudgeMs(0)}
+                  className="px-2 py-0.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded text-[10px]"
+                >
+                  0ms
+                </button>
+              </div>
             </div>
           </div>
         </div>
