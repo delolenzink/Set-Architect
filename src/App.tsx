@@ -16,7 +16,6 @@ import { AIMusicMixerModal } from './components/AIMusicMixerModal';
 import { ExportModal } from './components/ExportModal';
 import { DJRegistrationModal } from './components/DJRegistrationModal';
 import { AdminModal } from './components/AdminModal';
-import { CheckoutModal } from './components/CheckoutModal';
 import { Upload, Sparkles } from 'lucide-react';
 
 import { BlueprintType, Crate, DJRegistration, SortingParameters, Track } from './types';
@@ -75,7 +74,6 @@ export default function App() {
   const [isDJRegistrationOpen, setIsDJRegistrationOpen] = useState(false);
   const [djModalTab, setDjModalTab] = useState<'REGISTER' | 'STATUS'>('REGISTER');
   const [isAdminOpen, setIsAdminOpen] = useState(false);
-  const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
 
   const [activeDJ, setActiveDJ] = useState<DJRegistration | null>(null);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
@@ -344,7 +342,6 @@ export default function App() {
         onOpenExportModal={() => setIsExportOpen(true)}
         onOpenDualDeck={() => setIsDualDeckOpen(true)}
         onOpenAIMixer={() => setIsAIMixerOpen(true)}
-        onOpenCheckout={() => setIsCheckoutOpen(true)}
         onOpenRegister={() => {
           setDjModalTab('REGISTER');
           setIsDJRegistrationOpen(true);
@@ -496,13 +493,6 @@ export default function App() {
         onAdminLogout={() => setIsAdminAuthenticated(false)}
         trackCount={tracks.length}
         crateCount={crates.length}
-      />
-
-      <CheckoutModal
-        isOpen={isCheckoutOpen}
-        onClose={() => setIsCheckoutOpen(false)}
-        activeDJName={activeDJ?.djName}
-        activeDJEmail={activeDJ?.email}
       />
 
       {/* Mobile PWA Bottom Navigation Bar */}

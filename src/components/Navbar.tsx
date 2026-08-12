@@ -14,8 +14,6 @@ import {
   LogIn,
   Shield,
   User,
-  Crown,
-  Building2,
 } from 'lucide-react';
 import { Crate } from '../types';
 import { Logo } from './Logo';
@@ -33,7 +31,6 @@ interface NavbarProps {
   onOpenRegister: () => void;
   onOpenLogin: () => void;
   onOpenAdmin: () => void;
-  onOpenCheckout?: () => void;
   activeDJName?: string | null;
   isAdminLoggedIn?: boolean;
   onRunSort: () => void;
@@ -54,7 +51,6 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenRegister,
   onOpenLogin,
   onOpenAdmin,
-  onOpenCheckout,
   activeDJName,
   isAdminLoggedIn,
   onRunSort,
@@ -191,18 +187,6 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Shield className="w-3.5 h-3.5" />
             <span>{isAdminLoggedIn ? 'Admin (Active)' : 'Admin'}</span>
           </button>
-
-          {/* Pricing & Manual EFT Checkout Button */}
-          {onOpenCheckout && (
-            <button
-              onClick={onOpenCheckout}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono rounded-lg transition border border-emerald-500/50 bg-emerald-950/40 hover:bg-emerald-900/60 text-emerald-300 whitespace-nowrap w-full sm:w-auto shadow-sm"
-              title="View Pro/Executive pricing tiers and Capitec Manual EFT payment options"
-            >
-              <Building2 className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Manual EFT / Upgrade</span>
-            </button>
-          )}
 
           {/* Tools & Mix Controls */}
           {onOpenAIMixer && (
