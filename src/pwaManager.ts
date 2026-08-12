@@ -6,20 +6,27 @@ export interface BeforeInstallPromptEvent extends Event {
 }
 
 export function registerServiceWorker() {
-  if ('serviceWorker' in navigator && process.env.NODE_ENV === 'production') {
+  // Clear any legacy client cache or storage
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.removeItem('set_architect_demo_cache');
+      sessionStorage.clear();
+    } catch {}
+  }
+
+  if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
+      // Force update or re-register
       navigator.serviceWorker
         .register('/sw.js')
         .then((reg) => {
           console.log('Set Architect PWA Service Worker registered:', reg.scope);
-          // Check for service worker updates immediately
           reg.update();
         })
         .catch((err) => {
           console.error('Service Worker registration failed:', err);
         });
 
-      // Reload page if controller changes to serve fresh assets
       let refreshing = false;
       navigator.serviceWorker.addEventListener('controllerchange', () => {
         if (!refreshing) {

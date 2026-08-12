@@ -1,68 +1,34 @@
 // Set Architect Progressive Web App Service Worker
-const CACHE_NAME = 'set-architect-v3';
+const CACHE_NAME = 'set-architect-v5-clean';
 const STATIC_ASSETS = [
-  '/',
-  '/index.html',
   '/manifest.json',
   '/logo.svg'
 ];
 
-// Installation: Cache App Shell & immediately activate
+// Installation: Immediately activate
 self.addEventListener('install', (event) => {
   self.skipWaiting();
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(STATIC_ASSETS);
-    })
-  );
 });
 
-// Activation: Purge all old caches and claim clients immediately
+// Activation: Purge ALL previous caches to wipe stale demo track bundles
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((cacheNames) => {
-      return Promise.all(
-        cacheNames.map((cache) => {
-          if (cache !== CACHE_NAME) {
-            console.log('[SW] Purging old cache:', cache);
-            return caches.delete(cache);
-          }
-        })
-      );
+    caches.keys().then((keys) => {
+      return Promise.all(keys.map((k) => caches.delete(k)));
     }).then(() => self.clients.claim())
   );
 });
 
-// Fetch Strategy: Network-First with cache fallback for fresh updates
+// Fetch Strategy: Always pass through to network for fresh code
 self.addEventListener('fetch', (event) => {
-  const request = event.request;
-
-  if (request.method !== 'GET' || !request.url.startsWith('http')) {
+  if (event.request.method !== 'GET' || !event.request.url.startsWith('http')) {
     return;
   }
 
-  // Network First for all requests to guarantee live updates reflect immediately
   event.respondWith(
-    fetch(request)
-      .then((networkResponse) => {
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(CACHE_NAME).then((cache) => {
-            cache.put(request, responseToCache);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(() => {
-        // Fallback to cache when offline
-        return caches.match(request).then((cachedResponse) => {
-          if (cachedResponse) return cachedResponse;
-          if (request.mode === 'navigate') {
-            return caches.match('/index.html') || caches.match('/');
-          }
-          return null;
-        });
-      })
+    fetch(event.request, { cache: 'no-store' }).catch(() => {
+      return caches.match(event.request);
+    })
   );
 });
 
