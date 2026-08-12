@@ -50,53 +50,47 @@ export const Logo: React.FC<LogoProps> = ({
         {/* Background Squircle */}
         {showBackground && (
           <rect
-            x="8"
-            y="8"
-            width="496"
-            height="496"
-            rx="120"
-            fill="#0d0e12"
-            stroke="#1e2029"
+            x="12"
+            y="12"
+            width="488"
+            height="488"
+            rx="112"
+            fill="#0c0d10"
+            stroke="#1c1e26"
             strokeWidth="4"
           />
         )}
 
-        {/* Outer 'A' Chevron Frame */}
+        {/* Outer Stylized 'A' Chevron */}
         <path
-          d="M 256 100 L 378 350 H 338 L 256 182 L 174 350 H 134 L 256 100 Z"
-          fill="url(#logoAGradient)"
-        />
-
-        {/* Outer Legs Accent */}
-        <path
-          d="M 256 100 L 134 350 H 174 L 256 182 L 338 350 H 378 L 256 100 Z"
+          d="M 256 102 L 380 350 H 336 L 256 184 L 176 350 H 132 L 256 102 Z"
           fill="url(#logoAGradient)"
         />
 
         {/* Interior Equalizer Soundwave Spectrum Bars */}
-        {/* Bar 1 (Leftmost) */}
-        <rect x="180" y="285" width="12" height="40" rx="6" fill="#00f0ff" />
+        {/* Bar 1 (Leftmost Cyan) */}
+        <rect x="180" y="285" width="12" height="45" rx="6" fill="#00f0ff" />
         
-        {/* Bar 2 */}
-        <rect x="200" y="255" width="12" height="70" rx="6" fill="#00d8ff" />
+        {/* Bar 2 (Deep Cyan) */}
+        <rect x="200" y="252" width="12" height="78" rx="6" fill="#00d8ff" />
         
-        {/* Bar 3 */}
-        <rect x="220" y="225" width="12" height="100" rx="6" fill="#38bdf8" />
+        {/* Bar 3 (Light Sky Blue) */}
+        <rect x="220" y="218" width="12" height="112" rx="6" fill="#0284c7" />
         
-        {/* Bar 4 (Center Highest) */}
-        <rect x="240" y="185" width="12" height="140" rx="6" fill="#3b82f6" />
+        {/* Bar 4 (Royal Electric Blue - Center Peak 1) */}
+        <rect x="240" y="178" width="12" height="152" rx="6" fill="#2563eb" />
         
-        {/* Bar 5 */}
-        <rect x="260" y="210" width="12" height="115" rx="6" fill="#6366f1" />
+        {/* Bar 5 (Indigo Blue - Center Peak 2) */}
+        <rect x="260" y="182" width="12" height="148" rx="6" fill="#4f46e5" />
         
-        {/* Bar 6 */}
-        <rect x="280" y="240" width="12" height="85" rx="6" fill="#a855f7" />
+        {/* Bar 6 (Deep Violet) */}
+        <rect x="280" y="222" width="12" height="108" rx="6" fill="#7c3aed" />
         
-        {/* Bar 7 */}
-        <rect x="300" y="265" width="12" height="60" rx="6" fill="#c084fc" />
+        {/* Bar 7 (Vibrant Purple) */}
+        <rect x="300" y="258" width="12" height="72" rx="6" fill="#a855f7" />
 
-        {/* Bar 8 (Rightmost) */}
-        <rect x="320" y="285" width="12" height="40" rx="6" fill="#e879f9" />
+        {/* Bar 8 (Rightmost Magenta Pink) */}
+        <rect x="320" y="285" width="12" height="45" rx="6" fill="#d946ef" />
       </svg>
     </div>
   );

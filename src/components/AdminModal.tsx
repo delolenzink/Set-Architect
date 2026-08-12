@@ -17,6 +17,11 @@ import {
   AlertTriangle,
   LogOut,
   RefreshCw,
+  Building2,
+  CreditCard,
+  Sparkles,
+  CheckCircle,
+  Mail,
 } from 'lucide-react';
 import { DJRegistration } from '../types';
 import {
@@ -24,6 +29,11 @@ import {
   updateRegistrationStatus,
   deleteRegistration,
 } from '../lib/djRegistrationStore';
+import {
+  ManualPaymentRecord,
+  getManualPaymentsFromStorage,
+  verifyManualEFT,
+} from '../lib/manualPaymentStore';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -53,15 +63,26 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   const [registrations, setRegistrations] = useState<DJRegistration[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DECLINED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'DJS' | 'SYSTEM'>('DJS');
+  const [activeTab, setActiveTab] = useState<'DJS' | 'EFT_PAYMENTS' | 'SYSTEM'>('DJS');
+
+  // Manual Payments State
+  const [manualPayments, setManualPayments] = useState<ManualPaymentRecord[]>([]);
+  const [eftFilter, setEftFilter] = useState<'ALL' | 'pending_verification' | 'verified' | 'rejected'>('ALL');
+  const [eftSearch, setEftSearch] = useState('');
+  const [actionFeedback, setActionFeedback] = useState<string | null>(null);
 
   // Modal for decline reason
   const [declineTargetId, setDeclineTargetId] = useState<string | null>(null);
   const [declineReasonInput, setDeclineReasonInput] = useState('');
 
+  const loadData = () => {
+    setRegistrations(getDJRegistrations());
+    setManualPayments(getManualPaymentsFromStorage());
+  };
+
   useEffect(() => {
     if (isOpen) {
-      setRegistrations(getDJRegistrations());
+      loadData();
     }
   }, [isOpen]);
 
@@ -73,7 +94,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
     if (usernameInput.trim() === 'admin' && passwordInput === 'MouseNapolean2025#') {
       onAdminLogin(true);
-      setRegistrations(getDJRegistrations());
+      loadData();
       setUsernameInput('');
       setPasswordInput('');
     } else {
@@ -104,6 +125,13 @@ export const AdminModal: React.FC<AdminModalProps> = ({
       const updated = deleteRegistration(id);
       setRegistrations(updated);
     }
+  };
+
+  const handleVerifyEFT = async (paymentId: string, action: 'VERIFY' | 'REJECT') => {
+    const res = await verifyManualEFT(paymentId, action);
+    setActionFeedback(res.message);
+    setManualPayments(getManualPaymentsFromStorage());
+    setTimeout(() => setActionFeedback(null), 4000);
   };
 
   const handleExportCSV = () => {
@@ -141,9 +169,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     return matchesFilter && matchesSearch;
   });
 
+  // Filtered Manual Payments
+  const filteredPayments = manualPayments.filter((p) => {
+    const matchesStatus = eftFilter === 'ALL' || p.status === eftFilter;
+    const query = eftSearch.toLowerCase();
+    const matchesSearch =
+      p.userId.toLowerCase().includes(query) ||
+      (p.userEmail && p.userEmail.toLowerCase().includes(query)) ||
+      p.popReference.toLowerCase().includes(query) ||
+      p.plan.toLowerCase().includes(query);
+    return matchesStatus && matchesSearch;
+  });
+
   const pendingCount = registrations.filter((r) => r.status === 'PENDING').length;
   const approvedCount = registrations.filter((r) => r.status === 'APPROVED').length;
   const declinedCount = registrations.filter((r) => r.status === 'DECLINED').length;
+
+  const pendingEftCount = manualPayments.filter((p) => p.status === 'pending_verification').length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
@@ -164,7 +206,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 )}
               </h2>
               <p className="text-xs text-slate-400">
-                Monitor live app usage, review DJ registrations, and manage approvals
+                Review DJ registrations, verify Capitec manual EFT payments, and manage active tiers
               </p>
             </div>
           </div>
@@ -185,7 +227,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               </div>
               <h3 className="text-xl font-bold text-slate-100 font-mono">ADMIN AUTHENTICATION</h3>
               <p className="text-xs text-slate-400">
-                Please enter administrator credentials to access the DJ monitoring panel
+                Please enter administrator credentials to access the DJ & Billing verification panel
               </p>
             </div>
 
@@ -238,6 +280,14 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         ) : (
           /* Authenticated Admin Panel */
           <div className="p-6 overflow-y-auto space-y-6 flex-1">
+            {/* Action Feedback Banner */}
+            {actionFeedback && (
+              <div className="p-3 text-xs bg-emerald-950/80 border border-emerald-800 text-emerald-300 rounded-xl flex items-center gap-2 font-mono animate-fadeIn">
+                <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{actionFeedback}</span>
+              </div>
+            )}
+
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
@@ -252,7 +302,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 bg-amber-950/10">
                 <div className="flex items-center justify-between text-amber-400 text-[10px] font-mono">
-                  <span>PENDING</span>
+                  <span>PENDING DJs</span>
                   <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                 </div>
                 <div className="text-2xl font-bold font-mono text-amber-400 mt-1">
@@ -262,21 +312,21 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 bg-emerald-950/10">
                 <div className="flex items-center justify-between text-emerald-400 text-[10px] font-mono">
-                  <span>APPROVED</span>
+                  <span>PENDING EFTs</span>
+                  <Building2 className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">
+                  {pendingEftCount}
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 bg-emerald-950/10">
+                <div className="flex items-center justify-between text-emerald-400 text-[10px] font-mono">
+                  <span>APPROVED DJs</span>
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
                 <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">
                   {approvedCount}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-red-500/30 bg-red-950/10">
-                <div className="flex items-center justify-between text-red-400 text-[10px] font-mono">
-                  <span>DECLINED</span>
-                  <XCircle className="w-3.5 h-3.5 text-red-400" />
-                </div>
-                <div className="text-2xl font-bold font-mono text-red-400 mt-1">
-                  {declinedCount}
                 </div>
               </div>
 
@@ -293,7 +343,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
             {/* Navigation Tabs & Actions */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setActiveTab('DJS')}
                   className={`px-4 py-2 text-xs font-mono font-bold rounded-xl transition flex items-center gap-2 ${
@@ -304,6 +354,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 >
                   <Users className="w-3.5 h-3.5" />
                   <span>DJ Registrations ({registrations.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('EFT_PAYMENTS')}
+                  className={`px-4 py-2 text-xs font-mono font-bold rounded-xl transition flex items-center gap-2 relative ${
+                    activeTab === 'EFT_PAYMENTS'
+                      ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>EFT Verification ({manualPayments.length})</span>
+                  {pendingEftCount > 0 && (
+                    <span className="px-1.5 py-0.2 bg-red-500 text-white text-[9px] rounded-full font-bold animate-pulse">
+                      {pendingEftCount}
+                    </span>
+                  )}
                 </button>
 
                 <button
@@ -348,6 +415,424 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   <div className="relative w-full sm:w-72">
                     <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
                     <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search DJ name, email, genre..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-cyan-500 transition"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl text-xs font-mono">
+                    {(['ALL', 'PENDING', 'APPROVED', 'DECLINED'] as const).map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => setStatusFilter(st)}
+                        className={`px-3 py-1 rounded-lg transition font-bold ${
+                          statusFilter === st
+                            ? st === 'PENDING'
+                              ? 'bg-amber-500 text-black'
+                              : st === 'APPROVED'
+                              ? 'bg-emerald-500 text-black'
+                              : st === 'DECLINED'
+                              ? 'bg-red-500 text-black'
+                              : 'bg-cyan-500 text-black'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {st}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* DJ Roster Table / List */}
+                {filteredRegistrations.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-950 border border-slate-800 rounded-2xl text-slate-500 font-mono text-xs">
+                    No DJ registrations matching filter criteria.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredRegistrations.map((dj) => (
+                      <div
+                        key={dj.id}
+                        className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-slate-700 transition space-y-3"
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2 rounded-xl bg-slate-900 border border-slate-800 text-cyan-400 font-mono font-bold text-sm">
+                              {dj.djName.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-100 font-mono">
+                                  {dj.djName}
+                                </h4>
+                                {dj.status === 'PENDING' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full animate-pulse">
+                                    PENDING APPROVAL
+                                  </span>
+                                )}
+                                {dj.status === 'APPROVED' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full">
+                                    APPROVED
+                                  </span>
+                                )}
+                                {dj.status === 'DECLINED' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded-full">
+                                    DECLINED
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-400 font-mono">
+                                {dj.realName} • <span className="text-cyan-400">{dj.email}</span>
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Approve / Decline / Delete Controls */}
+                          <div className="flex items-center gap-2 pt-2 sm:pt-0">
+                            {dj.status !== 'APPROVED' && (
+                              <button
+                                onClick={() => handleApprove(dj.id)}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition shadow-md shadow-emerald-500/20"
+                                title="Approve DJ Registration"
+                              >
+                                <Check className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>APPROVE</span>
+                              </button>
+                            )}
+
+                            {dj.status !== 'DECLINED' && (
+                              <button
+                                onClick={() => {
+                                  setDeclineTargetId(dj.id);
+                                  setDeclineReasonInput('');
+                                }}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg transition"
+                                title="Decline DJ Registration"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>DECLINE</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDelete(dj.id)}
+                              className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-lg transition"
+                              title="Delete DJ Record"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        {/* DJ Details */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono text-slate-300 bg-slate-900/50 p-3 rounded-lg">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">PREFERRED GENRES:</span>
+                            <span className="text-amber-400 font-bold">{dj.genres}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">LOCATION & EXPERIENCE:</span>
+                            <span>{dj.location} • {dj.experience}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">SUBMISSION DATE:</span>
+                            <span>{new Date(dj.createdAt).toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        {dj.mixUrl && (
+                          <div className="text-xs font-mono">
+                            <span className="text-slate-500">Mix/Profile Link: </span>
+                            <a
+                              href={dj.mixUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="text-cyan-400 underline hover:text-cyan-300"
+                            >
+                              {dj.mixUrl}
+                            </a>
+                          </div>
+                        )}
+
+                        {dj.status === 'DECLINED' && dj.declineReason && (
+                          <div className="text-xs font-mono text-red-300 bg-red-950/30 p-2 rounded-lg border border-red-900/40">
+                            <strong>Decline Reason:</strong> {dj.declineReason}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 2: EFT Manual Payments Verification */}
+            {activeTab === 'EFT_PAYMENTS' && (
+              <div className="space-y-4">
+                {/* Verification Guidance Banner */}
+                <div className="p-4 rounded-xl bg-gradient-to-r from-amber-950/40 via-slate-950 to-slate-900 border border-amber-500/40 space-y-2 text-xs font-mono">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-amber-400 font-bold">
+                      <Building2 className="w-4 h-4" />
+                      <span>CAPITEC BANK STATEMENT MATCHING INSTRUCTIONS</span>
+                    </div>
+                    <span className="px-2 py-0.5 text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/40 rounded-full font-bold">
+                      ACCOUNT: 2516239218
+                    </span>
+                  </div>
+                  <p className="text-slate-300 leading-relaxed">
+                    Check your Capitec Bank statement for Account <strong className="text-amber-300">#2516239218</strong> (AfroSenses) or inspect incoming emails at <strong className="text-cyan-300">info@afrosenses.co.za</strong>. Matching a user’s reference executes a single update that flips their <strong className="text-emerald-400">subscription.tier</strong> to their chosen plan and <strong className="text-emerald-400">subscription.status</strong> to <strong className="text-emerald-400">active</strong>.
+                  </p>
+                </div>
+
+                {/* Search & Filter Bar */}
+                <div className="flex flex-col sm:flex-row gap-3 items-center justify-between">
+                  <div className="relative w-full sm:w-72">
+                    <Search className="w-3.5 h-3.5 text-slate-500 absolute left-3 top-3" />
+                    <input
+                      type="text"
+                      value={eftSearch}
+                      onChange={(e) => setEftSearch(e.target.value)}
+                      placeholder="Search User ID, POP Ref, Email..."
+                      className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-3 py-2 text-xs text-slate-200 placeholder-slate-600 focus:outline-none focus:border-amber-500 transition"
+                    />
+                  </div>
+
+                  <div className="flex items-center gap-1 bg-slate-950 p-1 border border-slate-800 rounded-xl text-xs font-mono">
+                    {(['ALL', 'pending_verification', 'verified', 'rejected'] as const).map((st) => (
+                      <button
+                        key={st}
+                        onClick={() => setEftFilter(st)}
+                        className={`px-3 py-1 rounded-lg transition font-bold ${
+                          eftFilter === st
+                            ? st === 'pending_verification'
+                              ? 'bg-amber-500 text-black'
+                              : st === 'verified'
+                              ? 'bg-emerald-500 text-black'
+                              : st === 'rejected'
+                              ? 'bg-red-500 text-black'
+                              : 'bg-cyan-500 text-black'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {st === 'pending_verification' ? 'PENDING' : st.toUpperCase()}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* EFT Payments List */}
+                {filteredPayments.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-950 border border-slate-800 rounded-2xl text-slate-500 font-mono text-xs">
+                    No manual EFT payment records found matching criteria.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {filteredPayments.map((p) => (
+                      <div
+                        key={p.id}
+                        className={`p-4 rounded-xl bg-slate-950 border transition space-y-3 ${
+                          p.status === 'pending_verification'
+                            ? 'border-amber-500/50 bg-amber-950/10'
+                            : p.status === 'verified'
+                            ? 'border-emerald-500/30'
+                            : 'border-red-900/40 opacity-75'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 font-mono font-bold text-xs">
+                              EFT
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-100 font-mono">
+                                  User: <span className="text-cyan-400">{p.userId}</span>
+                                </h4>
+                                <span className="px-2 py-0.5 text-[10px] font-mono font-bold bg-slate-800 text-slate-200 border border-slate-700 rounded-full">
+                                  {p.amountDisplay}
+                                </span>
+                                {p.status === 'pending_verification' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full animate-pulse">
+                                    PENDING VERIFICATION
+                                  </span>
+                                )}
+                                {p.status === 'verified' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full flex items-center gap-1">
+                                    <CheckCircle2 className="w-3 h-3" />
+                                    VERIFIED & ACTIVE
+                                  </span>
+                                )}
+                                {p.status === 'rejected' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-mono font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded-full">
+                                    REJECTED
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-400 font-mono mt-0.5">
+                                Plan Target: <strong className="text-amber-300 uppercase">{p.plan} TIER</strong> • Email: {p.userEmail || p.userId}
+                              </p>
+                            </div>
+                          </div>
+
+                          {/* Verification Actions */}
+                          <div className="flex items-center gap-2 pt-2 sm:pt-0">
+                            {p.status !== 'verified' && (
+                              <button
+                                onClick={() => handleVerifyEFT(p.id, 'VERIFY')}
+                                className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-mono font-bold bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-400 hover:to-teal-400 text-black rounded-lg transition shadow-md shadow-emerald-500/20"
+                                title="Confirm Capitec payment receipt and flip subscription.tier to active"
+                              >
+                                <Check className="w-4 h-4 stroke-[3]" />
+                                <span>VERIFY & ACTIVATE</span>
+                              </button>
+                            )}
+
+                            {p.status !== 'rejected' && (
+                              <button
+                                onClick={() => handleVerifyEFT(p.id, 'REJECT')}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg transition"
+                                title="Mark payment as unverified / rejected"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>REJECT</span>
+                              </button>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Payment Details Grid */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono text-slate-300 bg-slate-900/60 p-3 rounded-lg border border-slate-800">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">POP REFERENCE / FILENAME:</span>
+                            <span className="text-amber-400 font-bold select-all">{p.popReference}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">DESTINATION BANK:</span>
+                            <span className="text-emerald-400 font-bold">Capitec Bank #2516239218</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">SUBMISSION TIMESTAMP:</span>
+                            <span>{new Date(p.timestamp).toLocaleString()}</span>
+                          </div>
+                        </div>
+
+                        {p.adminNotes && (
+                          <div className="text-xs font-mono text-slate-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                            <strong className="text-cyan-400">Admin Note:</strong> {p.adminNotes}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Tab 3: System & Session Monitor */}
+            {activeTab === 'SYSTEM' && (
+              <div className="space-y-4 font-mono text-xs text-slate-300">
+                <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
+                  <h4 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
+                    <Activity className="w-4 h-4" />
+                    <span>APP PERFORMANCE & ENVIRONMENT MONITOR</span>
+                  </h4>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2">
+                    <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Active Playlists / Crates:</span>
+                        <span className="text-slate-100 font-bold">{crateCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Total Track Inventory:</span>
+                        <span className="text-slate-100 font-bold">{trackCount} tracks</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Web Audio API Engine:</span>
+                        <span className="text-emerald-400 font-bold">ONLINE (Ready)</span>
+                      </div>
+                    </div>
+
+                    <div className="p-3 bg-slate-900 rounded-xl border border-slate-800 space-y-1.5">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Capitec Bank Manual EFT:</span>
+                        <span className="text-emerald-400 font-bold">ACTIVE (#2516239218)</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Pending EFT Verifications:</span>
+                        <span className="text-amber-400 font-bold">{pendingEftCount}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Current Server Time:</span>
+                        <span className="text-slate-300">{new Date().toLocaleTimeString()}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-4 rounded-xl bg-amber-950/20 border border-amber-800/40 text-amber-300 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0" />
+                    <span>Admin changes take effect instantly across DJ accounts and subscription tiers.</span>
+                  </div>
+                  <button
+                    onClick={loadData}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Refresh Records</span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Decline Reason Modal Dialog */}
+        {declineTargetId && (
+          <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-md w-full space-y-4">
+              <h3 className="text-sm font-bold text-slate-100 font-mono">
+                DECLINE DJ REGISTRATION
+              </h3>
+              <p className="text-xs text-slate-400">
+                Specify a reason for declining this DJ application (optional):
+              </p>
+              <form onSubmit={handleDeclineConfirm} className="space-y-3">
+                <textarea
+                  value={declineReasonInput}
+                  onChange={(e) => setDeclineReasonInput(e.target.value)}
+                  placeholder="e.g. Incomplete profile or genre outside focus"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-red-500 transition h-24 font-mono"
+                />
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setDeclineTargetId(null)}
+                    className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-1.5 text-xs font-mono font-bold bg-red-500 text-white rounded-lg hover:bg-red-400 transition"
+                  >
+                    Confirm Decline
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
                       type="text"
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}

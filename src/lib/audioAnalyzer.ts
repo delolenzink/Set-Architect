@@ -2,6 +2,87 @@ import { CuePoint, SpectralData, Track } from '../types';
 import { parseCamelotKey } from './camelot';
 
 /**
+ * Calculates clean, beat-grid quantized cue points (Intro, Breakdown, Drop, Outro)
+ */
+export function calculateCleanCuePoints(
+  durationSeconds: number,
+  bpm: number,
+  firstDownbeatSec: number = 0
+): CuePoint[] {
+  const safeBpm = Math.max(60, Math.min(220, bpm || 124));
+  const beatSec = 60 / safeBpm;
+  const phraseBeats = 32; // 8 bars per phrase
+  const phraseSec = phraseBeats * beatSec;
+
+  const validDownbeat = Math.max(0, Math.min(durationSeconds * 0.25, firstDownbeatSec));
+
+  // 1. INTRO CUE: First downbeat (Beat 1)
+  const introPos = validDownbeat;
+  const introBeat = 1;
+
+  // 2. BREAKDOWN CUE: Quantized phrase boundary near ~35% duration
+  const targetBdSec = Math.max(introPos + phraseSec, durationSeconds * 0.35);
+  const bdPhraseIdx = Math.max(1, Math.round((targetBdSec - introPos) / phraseSec));
+  const bdPos = Math.min(durationSeconds - phraseSec * 2, introPos + bdPhraseIdx * phraseSec);
+  const bdBeat = 1 + bdPhraseIdx * phraseBeats;
+
+  // 3. DROP CUE: Quantized phrase boundary near ~50% duration
+  const targetDropSec = Math.max(bdPos + phraseSec, durationSeconds * 0.50);
+  const dropPhraseIdx = Math.max(bdPhraseIdx + 1, Math.round((targetDropSec - introPos) / phraseSec));
+  const dropPos = Math.min(durationSeconds - phraseSec, introPos + dropPhraseIdx * phraseSec);
+  const dropBeat = 1 + dropPhraseIdx * phraseBeats;
+
+  // 4. OUTRO CUE: Clean mix-out zone near ~80-85% duration,
+  // guaranteeing at least 32 beats (8 bars) of clean phrase before end of track
+  const minOutroSec = Math.max(dropPos + phraseSec, durationSeconds - phraseSec * 2);
+  const targetOutroSec = Math.min(
+    Math.max(minOutroSec, durationSeconds * 0.82),
+    durationSeconds - phraseSec
+  );
+  const outroPhraseIdx = Math.max(dropPhraseIdx + 1, Math.floor((targetOutroSec - introPos) / phraseSec));
+  const outroPos = Math.max(
+    dropPos + phraseSec,
+    introPos + outroPhraseIdx * phraseSec
+  );
+  const outroBeat = 1 + outroPhraseIdx * phraseBeats;
+
+  return [
+    {
+      id: `cue-intro-${Math.random().toString(36).substr(2, 6)}`,
+      name: 'Intro Downbeat (Beat 1)',
+      positionSeconds: Number(introPos.toFixed(3)),
+      beatNumber: introBeat,
+      type: 'INTRO',
+      color: '#06b6d4',
+    },
+    {
+      id: `cue-breakdown-${Math.random().toString(36).substr(2, 6)}`,
+      name: `Main Breakdown (Beat ${bdBeat})`,
+      positionSeconds: Number(bdPos.toFixed(3)),
+      beatNumber: bdBeat,
+      type: 'BREAKDOWN',
+      color: '#8b5cf6',
+    },
+    {
+      id: `cue-drop-${Math.random().toString(36).substr(2, 6)}`,
+      name: `Peak Drop (Beat ${dropBeat})`,
+      positionSeconds: Number(dropPos.toFixed(3)),
+      beatNumber: dropBeat,
+      type: 'DROP',
+      color: '#f59e0b',
+    },
+    {
+      id: `cue-outro-${Math.random().toString(36).substr(2, 6)}`,
+      name: `Mix Outro (Beat ${outroBeat})`,
+      positionSeconds: Number(outroPos.toFixed(3)),
+      beatNumber: outroBeat,
+      type: 'OUTRO',
+      color: '#10b981',
+    },
+  ];
+}
+
+/**
  * Analyzes an uploaded audio File using Web Audio API AudioContext
  */
 export async function analyzeAudioFile(
@@ -60,7 +141,6 @@ export async function analyzeAudioFile(
   const percussiveDensity = Math.min(10, Math.max(1, transientsPerSec * 1.5));
 
   // 4. Sub-bass & Spectral Estimation
-  // Estimate low frequency energy from waveform variation rate
   let zeroCrossings = 0;
   for (let i = 1; i < channelData.length; i += 20) {
     if ((channelData[i - 1] >= 0 && channelData[i] < 0) || (channelData[i - 1] < 0 && channelData[i] >= 0)) {
@@ -73,45 +153,15 @@ export async function analyzeAudioFile(
   const highFrequencyRatio = Math.min(10, Math.max(1, 10 - subBassWeight * 0.7));
 
   // 5. Calculate Dynamic Energy Score (DES: 1.0 to 10.0)
-  // Normalized DES combining RMS Loudness, Sub-bass, Percussive Density
   const normalizedRms = Math.min(10, Math.max(1, ((rmsDb + 35) / 35) * 10));
   const des = Math.min(10.0, Math.max(1.0, Number((normalizedRms * 0.45 + percussiveDensity * 0.35 + subBassWeight * 0.2).toFixed(1))));
 
-  // 6. Automated Phrase & Cue Points
-  const cuePoints: CuePoint[] = [
-    {
-      id: 'cue-intro',
-      name: 'Intro Drums (32B)',
-      positionSeconds: 0,
-      beatNumber: 1,
-      type: 'INTRO',
-      color: '#06b6d4',
-    },
-    {
-      id: 'cue-breakdown',
-      name: 'Main Breakdown',
-      positionSeconds: Math.floor(durationSeconds * 0.35),
-      beatNumber: 65,
-      type: 'BREAKDOWN',
-      color: '#8b5cf6',
-    },
-    {
-      id: 'cue-drop',
-      name: 'Main Peak Drop',
-      positionSeconds: Math.floor(durationSeconds * 0.48),
-      beatNumber: 97,
-      type: 'DROP',
-      color: '#f59e0b',
-    },
-    {
-      id: 'cue-outro',
-      name: 'Mix Outro (32B)',
-      positionSeconds: Math.floor(durationSeconds * 0.82),
-      beatNumber: 193,
-      type: 'OUTRO',
-      color: '#10b981',
-    },
-  ];
+  // 6. First Downbeat Detection & Quantized Clean Cue Points
+  const firstDownbeatSec = detectFirstDownbeat(audioBuffer);
+  const detectedBpm = knownBpm || Math.round(120 + (des * 1.5) + (Math.random() * 4 - 2));
+  const detectedKey = knownKey ? parseCamelotKey(knownKey) : parseCamelotKey(['8A', '9A', '10A', '11A', '8B', '9B'][Math.floor(Math.random() * 6)]);
+
+  const cuePoints = calculateCleanCuePoints(durationSeconds, detectedBpm, firstDownbeatSec);
 
   const spectral: SpectralData = {
     subBassWeight: Number(subBassWeight.toFixed(1)),
@@ -121,9 +171,6 @@ export async function analyzeAudioFile(
     percussiveDensity: Number(percussiveDensity.toFixed(1)),
     rmsDb: Number(rmsDb.toFixed(1)),
   };
-
-  const detectedBpm = knownBpm || Math.round(120 + (des * 1.5) + (Math.random() * 4 - 2));
-  const detectedKey = knownKey ? parseCamelotKey(knownKey) : parseCamelotKey(['8A', '9A', '10A', '11A', '8B', '9B'][Math.floor(Math.random() * 6)]);
 
   return {
     title: file.name.replace(/\.[^/.]+$/, ''),
@@ -170,41 +217,7 @@ export function generateSyntheticTrackAnalysis(
   }
 
   const durationSeconds = 300 + Math.floor(Math.random() * 90);
-
-  const cuePoints: CuePoint[] = [
-    {
-      id: `cue-intro-${Math.random()}`,
-      name: 'Intro Beat (32B)',
-      positionSeconds: 0,
-      beatNumber: 1,
-      type: 'INTRO',
-      color: '#06b6d4',
-    },
-    {
-      id: `cue-bd-${Math.random()}`,
-      name: 'Atmospheric Breakdown',
-      positionSeconds: Math.floor(durationSeconds * 0.35),
-      beatNumber: 65,
-      type: 'BREAKDOWN',
-      color: '#8b5cf6',
-    },
-    {
-      id: `cue-drop-${Math.random()}`,
-      name: 'Peak Drop',
-      positionSeconds: Math.floor(durationSeconds * 0.48),
-      beatNumber: 97,
-      type: 'DROP',
-      color: '#f59e0b',
-    },
-    {
-      id: `cue-outro-${Math.random()}`,
-      name: 'Outro Mix Zone',
-      positionSeconds: Math.floor(durationSeconds * 0.82),
-      beatNumber: 193,
-      type: 'OUTRO',
-      color: '#10b981',
-    },
-  ];
+  const cuePoints = calculateCleanCuePoints(durationSeconds, bpm, 0.0);
 
   const subBassWeight = Number((4.0 + des * 0.55).toFixed(1));
   const midRangeDensity = Number((3.5 + Math.random() * 5).toFixed(1));

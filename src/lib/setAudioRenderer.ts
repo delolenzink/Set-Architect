@@ -186,16 +186,18 @@ export async function renderContinuousSetAudio(
 
   // Target set BPM calculation (defaults to first track BPM or average BPM across set)
   const masterBpm = tracks[0]?.bpm || 124;
+  const beatSec = 60 / masterBpm;
 
-  const trackDurations: number[] = [];
-  const overlaps: number[] = [];
+  const introCueBuffers: number[] = [];
+  const outroCueBuffers: number[] = [];
+  const rawDurations: number[] = [];
   const playbackRates: number[] = [];
 
   for (let i = 0; i < tracks.length; i++) {
     const buf = decodedBuffers[i];
     const track = tracks[i];
     const nativeBpm = track.bpm || masterBpm;
-    
+
     // Calculate playback rate so all tracks in transition blend at masterBpm
     const rate = masterBpm / nativeBpm;
     playbackRates.push(rate);
@@ -208,53 +210,48 @@ export async function renderContinuousSetAudio(
       rawDur = Math.min(35, rawDur);
     }
 
-    // Timeline duration adjusted for playback rate
-    const playDurOnTimeline = rawDur / rate;
-    trackDurations.push(playDurOnTimeline);
+    rawDurations.push(rawDur);
 
-    // Phrase-aligned overlap in beats:
-    // 32 beats (8 bars) for full tracks, 16 beats for short edit, 8 beats for teaser
-    let phraseBeats = 32;
-    if (mixMode === 'SHORT_EDIT') phraseBeats = 16;
-    if (mixMode === 'MINI_TEASER') phraseBeats = 8;
-
-    const beatSec = 60 / masterBpm;
-    let overlapSec = phraseBeats * beatSec;
-
-    // Safety constraint: overlap shouldn't exceed 25% of track duration
-    if (overlapSec > playDurOnTimeline * 0.25) {
-      overlapSec = Math.floor((playDurOnTimeline * 0.25) / beatSec) * beatSec;
+    // Get clean Intro Cue position in buffer seconds (mix-in downbeat)
+    let introCue = track.cuePoints?.find((c) => c.type === 'INTRO')?.positionSeconds;
+    if (introCue === undefined || introCue < 0 || introCue >= rawDur) {
+      introCue = buf ? detectFirstDownbeat(buf) : 0;
     }
+    introCueBuffers.push(introCue);
 
-    overlaps.push(i < tracks.length - 1 ? overlapSec : 0);
+    // Get clean Outro Cue position in buffer seconds (mix-out point)
+    let outroCue = track.cuePoints?.find((c) => c.type === 'OUTRO')?.positionSeconds;
+    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 8 : 32;
+    const phraseSecNative = phraseBeats * (60 / nativeBpm);
+
+    if (outroCue === undefined || outroCue <= introCue || outroCue >= rawDur) {
+      outroCue = Math.max(introCue + phraseSecNative, rawDur - phraseSecNative);
+    }
+    outroCueBuffers.push(outroCue);
   }
 
-  // Calculate 100% Phase-Aligned & Downbeat-Synced Timeline Start Times
+  // Calculate 100% Phase-Aligned & Downbeat-Synced Timeline Start Times:
+  // Track i+1 Intro Cue aligns millisecond-for-millisecond with Track i Outro Cue!
   const startTimes: number[] = [0];
-  const beatSec = 60 / masterBpm;
 
-  for (let i = 1; i < tracks.length; i++) {
-    const prevStart = startTimes[i - 1];
-    const prevDur = trackDurations[i - 1];
-    const prevOverlap = overlaps[i - 1];
-    const prevOnsetTimeline = downbeatOnsets[i - 1] / playbackRates[i - 1];
+  for (let i = 0; i < tracks.length - 1; i++) {
+    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 8 : 32;
+    const transitionTimelineSec = phraseBeats * beatSec;
 
-    const currOnsetTimeline = downbeatOnsets[i] / playbackRates[i];
+    // Outro Cue time of Track i on the master timeline
+    const trackI_OutroTimeline = startTimes[i] + (outroCueBuffers[i] / playbackRates[i]);
 
-    // Unsnapped mix-in point (transition start)
-    const rawMixIn = prevStart + prevDur - prevOverlap;
+    // Track i+1 start time on master timeline so its Intro Cue downbeat lands at trackI_OutroTimeline:
+    const trackNext_StartTimeline = Math.max(0, trackI_OutroTimeline - (introCueBuffers[i + 1] / playbackRates[i + 1]));
 
-    // Snap mix-in point to exact downbeat grid of previous track
-    const beatIndex = Math.round((rawMixIn - (prevStart + prevOnsetTimeline)) / beatSec);
-    const snappedMixIn = (prevStart + prevOnsetTimeline) + beatIndex * beatSec;
-
-    // Set current track timeline start time so its downbeat aligns exactly at snappedMixIn
-    const currStartTime = Math.max(0, snappedMixIn - currOnsetTimeline);
-    startTimes.push(currStartTime);
+    startTimes.push(trackNext_StartTimeline);
   }
 
-  const totalDurationSeconds =
-    startTimes[tracks.length - 1] + trackDurations[tracks.length - 1];
+  // Calculate total master mix timeline duration
+  const lastIdx = tracks.length - 1;
+  const phraseBeatsLast = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 8 : 32;
+  const lastOutroTimeline = startTimes[lastIdx] + (outroCueBuffers[lastIdx] / playbackRates[lastIdx]);
+  const totalDurationSeconds = lastOutroTimeline + (phraseBeatsLast * beatSec);
 
   const sampleRate = 44100;
   const totalSamples = Math.ceil(totalDurationSeconds * sampleRate);
@@ -283,12 +280,15 @@ export async function renderContinuousSetAudio(
     const track = tracks[i];
     const audioBuf = decodedBuffers[i];
     const startTime = startTimes[i];
-    const playDurTimeline = trackDurations[i];
     const rate = playbackRates[i];
+    const introCueBuf = introCueBuffers[i];
+    const outroCueBuf = outroCueBuffers[i];
 
-    const overlapIn = i > 0 ? overlaps[i - 1] : 0;
-    const overlapOut = overlaps[i];
-    const endTime = startTime + playDurTimeline;
+    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 8 : 32;
+    const transitionTimelineSec = phraseBeats * beatSec;
+
+    // Clean mix-out point on master timeline
+    const mixOutTimeline = startTime + (outroCueBuf / rate);
 
     onProgress?.(
       20 + Math.floor((i / tracks.length) * 55),
@@ -300,20 +300,19 @@ export async function renderContinuousSetAudio(
     // Equal-Power Volume Envelope Scheduling
     if (i === 0) {
       trackGain.gain.setValueAtTime(1.0, startTime);
-    } else if (overlapIn > 0) {
-      // Smooth Equal-Power Fade-In over the overlap window
-      trackGain.gain.setValueCurveAtTime(fadeInCurve, startTime, overlapIn);
+    } else {
+      // Smooth Equal-Power Fade-In over transition
+      trackGain.gain.setValueCurveAtTime(fadeInCurve, startTime, transitionTimelineSec);
     }
 
-    const fadeOutStart = endTime - overlapOut;
-    if (i < tracks.length - 1 && overlapOut > 0) {
-      // Smooth Equal-Power Fade-Out over the next track's overlap window
-      trackGain.gain.setValueCurveAtTime(fadeOutCurve, fadeOutStart, overlapOut);
+    if (i < tracks.length - 1) {
+      // Smooth Equal-Power Fade-Out over transition
+      trackGain.gain.setValueCurveAtTime(fadeOutCurve, mixOutTimeline, transitionTimelineSec);
     } else {
       // Final track end fade out
-      const finalFadeStart = Math.max(startTime, endTime - 2.5);
+      const finalFadeStart = Math.max(startTime, mixOutTimeline);
       trackGain.gain.setValueAtTime(1.0, finalFadeStart);
-      trackGain.gain.linearRampToValueAtTime(0.0001, endTime);
+      trackGain.gain.linearRampToValueAtTime(0.0001, finalFadeStart + transitionTimelineSec);
     }
 
     // Automated Sub-Bass Crossover Filter (Highpass 20Hz <-> 250Hz)
@@ -321,11 +320,11 @@ export async function renderContinuousSetAudio(
     const hpFilter = offlineCtx.createBiquadFilter();
     hpFilter.type = 'highpass';
 
-    if (i > 0 && overlapIn > 0) {
+    if (i > 0) {
       // Incoming Track: Keep sub-bass cut (250Hz) during initial intro blend,
       // then drop to 20Hz at the midpoint of the crossfade to bring in the new sub-bass!
-      const swapPoint = startTime + overlapIn * 0.5;
-      const swapDuration = overlapIn * 0.3;
+      const swapPoint = startTime + transitionTimelineSec * 0.4;
+      const swapDuration = transitionTimelineSec * 0.4;
 
       hpFilter.frequency.setValueAtTime(250, startTime);
       hpFilter.frequency.setValueAtTime(250, swapPoint);
@@ -335,17 +334,24 @@ export async function renderContinuousSetAudio(
     }
 
     // Outgoing Track Sub-Bass Cut:
-    if (i < tracks.length - 1 && overlapOut > 0) {
-      const swapPoint = fadeOutStart + overlapOut * 0.5;
-      const swapDuration = overlapOut * 0.3;
+    if (i < tracks.length - 1) {
+      const swapPoint = mixOutTimeline + transitionTimelineSec * 0.4;
+      const swapDuration = transitionTimelineSec * 0.4;
 
-      hpFilter.frequency.setValueAtTime(20, fadeOutStart);
+      hpFilter.frequency.setValueAtTime(20, mixOutTimeline);
       hpFilter.frequency.setValueAtTime(20, swapPoint);
       hpFilter.frequency.exponentialRampToValueAtTime(250, swapPoint + swapDuration);
     }
 
     hpFilter.connect(trackGain);
     trackGain.connect(masterGain);
+
+    const playEndTimeOnTimeline = (i < tracks.length - 1)
+      ? (mixOutTimeline + transitionTimelineSec)
+      : (startTime + (rawDurations[i] / rate));
+
+    const playTimelineDuration = Math.max(0.1, playEndTimeOnTimeline - startTime);
+    const playBufferDuration = playTimelineDuration * rate;
 
     if (audioBuf) {
       // Real uploaded audio track!
@@ -356,7 +362,7 @@ export async function renderContinuousSetAudio(
       src.playbackRate.setValueAtTime(rate, startTime);
 
       src.connect(hpFilter);
-      src.start(startTime, 0, playDurTimeline * rate);
+      src.start(startTime, 0, Math.min(audioBuf.duration, playBufferDuration));
     } else {
       // Synthetic Studio Sound Fallback for manual tracks without audio files
       generateSyntheticTrackAudio(
@@ -364,8 +370,9 @@ export async function renderContinuousSetAudio(
         hpFilter,
         track,
         startTime,
-        playDurTimeline,
-        sampleRate
+        playTimelineDuration,
+        sampleRate,
+        masterBpm
       );
     }
   }
@@ -398,9 +405,10 @@ function generateSyntheticTrackAudio(
   track: Track,
   startTime: number,
   duration: number,
-  sampleRate: number
+  sampleRate: number,
+  masterBpm: number = 124
 ) {
-  const bpm = track.bpm || 124;
+  const bpm = masterBpm;
   const beatInterval = 60 / bpm;
   const totalBeats = Math.floor(duration / beatInterval);
 
