@@ -97,7 +97,7 @@ export function audioBufferToWav(buffer: AudioBuffer): Blob {
 /**
  * Ensures track audioBuffer is loaded/decoded if a fileObject exists
  */
-async function ensureTrackAudioBuffer(
+export async function ensureTrackAudioBuffer(
   track: Track,
   onStatus?: (msg: string) => void
 ): Promise<AudioBuffer | null> {
@@ -123,8 +123,32 @@ async function ensureTrackAudioBuffer(
 export type MixMode = 'FULL_TRACKS' | 'SHORT_EDIT' | 'MINI_TEASER';
 
 /**
- * Renders a full continuous DJ set mix using Web Audio OfflineAudioContext
- * Blends uploaded audio tracks seamlessly with crossfades and EQ management.
+ * Generates an Equal-Power Fade Out Curve (Cosine: 1.0 -> 0.0)
+ */
+function createEqualPowerFadeOutCurve(steps = 256): Float32Array {
+  const curve = new Float32Array(steps);
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    curve[i] = Math.cos((t * Math.PI) / 2);
+  }
+  return curve;
+}
+
+/**
+ * Generates an Equal-Power Fade In Curve (Sine: 0.0 -> 1.0)
+ */
+function createEqualPowerFadeInCurve(steps = 256): Float32Array {
+  const curve = new Float32Array(steps);
+  for (let i = 0; i < steps; i++) {
+    const t = i / (steps - 1);
+    curve[i] = Math.sin((t * Math.PI) / 2);
+  }
+  return curve;
+}
+
+/**
+ * Renders a full continuous DJ set mix using Web Audio OfflineAudioContext.
+ * Performs beat-matched phase alignment, equal-power crossfading, and clean sub-bass crossover swaps.
  */
 export async function renderContinuousSetAudio(
   tracks: Track[],
@@ -136,7 +160,7 @@ export async function renderContinuousSetAudio(
     throw new Error('No tracks to render in playlist');
   }
 
-  onProgress?.(2, 'Decoding uploaded audio files & preparing DSP Mixer...');
+  onProgress?.(2, 'Decoding uploaded audio files & preparing Beat-Sync DSP Mixer...');
 
   // Step 1: Decode all uploaded track audio buffers if needed
   const decodedBuffers: (AudioBuffer | null)[] = [];
@@ -152,11 +176,12 @@ export async function renderContinuousSetAudio(
     decodedBuffers.push(buffer);
   }
 
-  onProgress?.(18, 'Calculating harmonic alignment & crossfade timelines...');
+  onProgress?.(18, 'Calculating beat-grid alignments & sub-bass swap schedules...');
 
-  // Step 2: Determine durations & transition overlap times
+  // Step 2: Calculate track durations, phrase overlaps, and grid-aligned start times
   const trackDurations: number[] = [];
   const overlaps: number[] = [];
+  const targetMixBpms: number[] = [];
 
   for (let i = 0; i < tracks.length; i++) {
     const buf = decodedBuffers[i];
@@ -171,18 +196,42 @@ export async function renderContinuousSetAudio(
 
     trackDurations.push(duration);
 
-    // Calculate crossfade overlap: 16 seconds or ~10-15% of track duration
-    const overlap = i < tracks.length - 1 ? Math.min(16, Math.max(6, duration * 0.12)) : 0;
-    overlaps.push(overlap);
+    const bpm = track.bpm || 124;
+    targetMixBpms.push(bpm);
+
+    // Calculate phrase-aligned overlap in beats:
+    // 32 beats (8 bars) for full tracks, 16 beats for short edit, 8 beats for teaser
+    let phraseBeats = 32;
+    if (mixMode === 'SHORT_EDIT') phraseBeats = 16;
+    if (mixMode === 'MINI_TEASER') phraseBeats = 8;
+
+    // Convert beats to exact seconds based on current track BPM
+    const beatSec = 60 / bpm;
+    let overlapSec = phraseBeats * beatSec;
+
+    // Safety constraint: overlap shouldn't exceed 25% of track duration
+    if (overlapSec > duration * 0.25) {
+      overlapSec = Math.floor((duration * 0.25) / beatSec) * beatSec;
+    }
+
+    overlaps.push(i < tracks.length - 1 ? overlapSec : 0);
   }
 
-  // Calculate start times for each track
+  // Calculate grid-snapped timeline start times
   const startTimes: number[] = [0];
   for (let i = 1; i < tracks.length; i++) {
     const prevStart = startTimes[i - 1];
     const prevDur = trackDurations[i - 1];
     const prevOverlap = overlaps[i - 1];
-    startTimes.push(prevStart + prevDur - prevOverlap);
+
+    // Align start time exactly on a beat boundary of the previous track
+    const prevBpm = targetMixBpms[i - 1];
+    const prevBeatSec = 60 / prevBpm;
+
+    const rawStart = prevStart + prevDur - prevOverlap;
+    const snappedStart = Math.round(rawStart / prevBeatSec) * prevBeatSec;
+
+    startTimes.push(snappedStart);
   }
 
   const totalDurationSeconds =
@@ -193,19 +242,22 @@ export async function renderContinuousSetAudio(
 
   const offlineCtx = new OfflineAudioContext(2, totalSamples, sampleRate);
 
-  // Master Gain & Limiter
+  // Master Gain & Brickwall Peak Limiter
   const masterGain = offlineCtx.createGain();
-  masterGain.gain.setValueAtTime(0.88, 0);
+  masterGain.gain.setValueAtTime(0.90, 0);
 
   const compressor = offlineCtx.createDynamicsCompressor();
-  compressor.threshold.setValueAtTime(-1.2, 0);
-  compressor.knee.setValueAtTime(8, 0);
-  compressor.ratio.setValueAtTime(6, 0);
+  compressor.threshold.setValueAtTime(-1.5, 0);
+  compressor.knee.setValueAtTime(6, 0);
+  compressor.ratio.setValueAtTime(4, 0);
   compressor.attack.setValueAtTime(0.003, 0);
-  compressor.release.setValueAtTime(0.12, 0);
+  compressor.release.setValueAtTime(0.1, 0);
 
   masterGain.connect(compressor);
   compressor.connect(offlineCtx.destination);
+
+  const fadeInCurve = createEqualPowerFadeInCurve();
+  const fadeOutCurve = createEqualPowerFadeOutCurve();
 
   // Step 3: Process each track and schedule audio nodes
   for (let i = 0; i < tracks.length; i++) {
@@ -219,44 +271,59 @@ export async function renderContinuousSetAudio(
 
     onProgress?.(
       20 + Math.floor((i / tracks.length) * 55),
-      `Mixing Track ${i + 1}/${tracks.length}: "${track.title}" (${track.key.code}, ${track.bpm} BPM)...`
+      `Beat-Syncing Track ${i + 1}/${tracks.length}: "${track.title}" (${track.key.code}, ${track.bpm} BPM)...`
     );
 
     const trackGain = offlineCtx.createGain();
 
-    // Volume Envelope for seamless crossfading
-    // 1. Fade-in during overlap from previous track
+    // Equal-Power Volume Envelope Scheduling for Seamless Crossfades
     if (i === 0) {
       trackGain.gain.setValueAtTime(1.0, startTime);
-    } else {
-      trackGain.gain.setValueAtTime(0.0001, startTime);
-      trackGain.gain.exponentialRampToValueAtTime(1.0, startTime + overlapIn);
+    } else if (overlapIn > 0) {
+      // Smooth Equal-Power Fade-In over the overlap window
+      trackGain.gain.setValueCurveAtTime(fadeInCurve, startTime, overlapIn);
     }
 
-    // 2. Main playback body and fade-out into next track
     const fadeOutStart = endTime - overlapOut;
     if (i < tracks.length - 1 && overlapOut > 0) {
-      trackGain.gain.setValueAtTime(1.0, fadeOutStart);
-      trackGain.gain.exponentialRampToValueAtTime(0.0001, endTime);
+      // Smooth Equal-Power Fade-Out over the next track's overlap window
+      trackGain.gain.setValueCurveAtTime(fadeOutCurve, fadeOutStart, overlapOut);
     } else {
-      // Final track fade out at end
-      trackGain.gain.setValueAtTime(1.0, Math.max(startTime, endTime - 3));
+      // Final track end fade out (last 2.5 seconds)
+      const finalFadeStart = Math.max(startTime, endTime - 2.5);
+      trackGain.gain.setValueAtTime(1.0, finalFadeStart);
       trackGain.gain.linearRampToValueAtTime(0.0001, endTime);
     }
 
-    // Highpass Filter for sub-bass swap during fade in
-    const filter = offlineCtx.createBiquadFilter();
-    filter.type = 'highpass';
+    // Automated Sub-Bass Crossover Filter (Highpass 20Hz <-> 250Hz)
+    // Prevents bass mud / phase cancellation during beat-mixed transitions
+    const hpFilter = offlineCtx.createBiquadFilter();
+    hpFilter.type = 'highpass';
 
     if (i > 0 && overlapIn > 0) {
-      // Start with low frequencies cut, then bring sub-bass in smoothly
-      filter.frequency.setValueAtTime(250, startTime);
-      filter.frequency.exponentialRampToValueAtTime(20, startTime + overlapIn * 0.8);
+      // Incoming Track: Keep sub-bass cut (250Hz) during initial intro blend,
+      // then drop to 20Hz at the midpoint of the crossfade to bring in the new sub-bass!
+      const swapPoint = startTime + overlapIn * 0.5;
+      const swapDuration = overlapIn * 0.3;
+
+      hpFilter.frequency.setValueAtTime(250, startTime);
+      hpFilter.frequency.setValueAtTime(250, swapPoint);
+      hpFilter.frequency.exponentialRampToValueAtTime(20, swapPoint + swapDuration);
     } else {
-      filter.frequency.setValueAtTime(20, startTime);
+      hpFilter.frequency.setValueAtTime(20, startTime);
     }
 
-    filter.connect(trackGain);
+    // Outgoing Track Sub-Bass Cut:
+    if (i < tracks.length - 1 && overlapOut > 0) {
+      const swapPoint = fadeOutStart + overlapOut * 0.5;
+      const swapDuration = overlapOut * 0.3;
+
+      hpFilter.frequency.setValueAtTime(20, fadeOutStart);
+      hpFilter.frequency.setValueAtTime(20, swapPoint);
+      hpFilter.frequency.exponentialRampToValueAtTime(250, swapPoint + swapDuration);
+    }
+
+    hpFilter.connect(trackGain);
     trackGain.connect(masterGain);
 
     if (audioBuf) {
@@ -264,24 +331,37 @@ export async function renderContinuousSetAudio(
       const src = offlineCtx.createBufferSource();
       src.buffer = audioBuf;
 
-      // Pitch-bend / tempo adjustment to align with set BPM if applicable
+      // Precise Beat-Sync Tempo Matching
+      // Align incoming track playback rate to match previous track tempo during transition
       if (i > 0) {
-        const prevTrack = tracks[i - 1];
-        if (prevTrack.bpm && track.bpm) {
-          const bpmRatio = prevTrack.bpm / track.bpm;
-          if (Math.abs(bpmRatio - 1) <= 0.08) {
-            src.playbackRate.setValueAtTime(bpmRatio, startTime);
+        const prevBpm = targetMixBpms[i - 1];
+        const currBpm = track.bpm || 124;
+
+        if (prevBpm && currBpm) {
+          const bpmRatio = prevBpm / currBpm;
+          // Match tempo during the crossfade transition
+          src.playbackRate.setValueAtTime(bpmRatio, startTime);
+
+          // Gently ramp back to native BPM over 16 beats after the transition completes
+          const beatSec = 60 / currBpm;
+          const rampDuration = 16 * beatSec;
+          const rampStart = startTime + overlapIn;
+          const rampEnd = Math.min(endTime - overlapOut, rampStart + rampDuration);
+
+          if (rampEnd > rampStart) {
+            src.playbackRate.setValueAtTime(bpmRatio, rampStart);
+            src.playbackRate.linearRampToValueAtTime(1.0, rampEnd);
           }
         }
       }
 
-      src.connect(filter);
+      src.connect(hpFilter);
       src.start(startTime, 0, playDuration);
     } else {
-      // Fallback synthetic studio sound for demo metadata tracks without raw audio files
+      // Synthetic Studio Sound Fallback for manual tracks without audio files
       generateSyntheticTrackAudio(
         offlineCtx,
-        filter,
+        hpFilter,
         track,
         startTime,
         playDuration,
@@ -290,7 +370,7 @@ export async function renderContinuousSetAudio(
     }
   }
 
-  onProgress?.(80, 'Rendering master continuous set audio buffer via Web Audio DSP...');
+  onProgress?.(80, 'Rendering continuous beat-mixed set audio via Web Audio DSP...');
 
   const renderedBuffer = await offlineCtx.startRendering();
 
@@ -299,7 +379,7 @@ export async function renderContinuousSetAudio(
   const wavBlob = audioBufferToWav(renderedBuffer);
   const audioUrl = URL.createObjectURL(wavBlob);
 
-  onProgress?.(100, 'Set Mix Rendered Successfully!');
+  onProgress?.(100, 'Seamless DJ Beat Mix Rendered Successfully!');
 
   return {
     blob: wavBlob,
@@ -420,3 +500,4 @@ function createNoiseBuffer(
   }
   return buffer;
 }
+

@@ -8,6 +8,8 @@ import {
   Plus,
   Sparkles,
   Zap,
+  Wand2,
+  Bot,
 } from 'lucide-react';
 import { Crate } from '../types';
 
@@ -20,6 +22,7 @@ interface NavbarProps {
   onOpenCamelotWheel: () => void;
   onOpenExportModal: () => void;
   onOpenDualDeck: () => void;
+  onOpenAIMixer?: () => void;
   onRunSort: () => void;
   isSorting: boolean;
   trackCount: number;
@@ -34,6 +37,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenCamelotWheel,
   onOpenExportModal,
   onOpenDualDeck,
+  onOpenAIMixer,
   onRunSort,
   isSorting,
   trackCount,
@@ -109,6 +113,17 @@ export const Navbar: React.FC<NavbarProps> = ({
 
         {/* Action Controls */}
         <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+          {onOpenAIMixer && (
+            <button
+              onClick={onOpenAIMixer}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black rounded-lg transition shadow-md shadow-cyan-500/20 whitespace-nowrap"
+              title="Open AI Music Mixer & Set Fit Radar"
+            >
+              <Bot className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>AI Music Mixer</span>
+            </button>
+          )}
+
           <button
             onClick={onOpenCamelotWheel}
             className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-900 hover:bg-slate-800 text-cyan-400 border border-cyan-900/60 rounded-lg transition"

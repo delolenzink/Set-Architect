@@ -13,6 +13,7 @@ import {
   Layers,
   Sliders,
   Volume2,
+  Wand2,
 } from 'lucide-react';
 import { Track, TransitionAnalysis } from '../types';
 import { renderContinuousSetAudio, MixMode } from '../lib/setAudioRenderer';
@@ -23,6 +24,7 @@ interface CreateTransitionsModalProps {
   tracks: Track[];
   transitions: TransitionAnalysis[];
   blueprintName: string;
+  onOpenMashupModal?: () => void;
 }
 
 export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
@@ -31,6 +33,7 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
   tracks,
   transitions,
   blueprintName,
+  onOpenMashupModal,
 }) => {
   const [mixMode, setMixMode] = useState<MixMode>('FULL_TRACKS');
   const [isRendering, setIsRendering] = useState(false);
@@ -122,12 +125,28 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-sm bg-[#1a1a20] hover:bg-[#25252e] text-[#888] hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            {onOpenMashupModal && (
+              <button
+                onClick={() => {
+                  onClose();
+                  onOpenMashupModal();
+                }}
+                className="px-3 py-1.5 text-xs font-mono font-bold bg-amber-500/10 text-amber-400 border border-amber-500/40 hover:bg-amber-500 hover:text-black rounded-sm transition flex items-center gap-1.5 whitespace-nowrap"
+                title="Switch to 2-track Stem Mashup Blender"
+              >
+                <Wand2 className="w-3.5 h-3.5" />
+                <span>MASHUP BLENDER</span>
+              </button>
+            )}
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-sm bg-[#1a1a20] hover:bg-[#25252e] text-[#888] hover:text-white transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Modal Content */}

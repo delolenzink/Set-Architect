@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import {
   ArrowDown,
   ArrowUp,
@@ -13,9 +13,13 @@ import {
   Trash2,
   Zap,
   Volume2,
+  Upload,
+  Wand2,
+  Bot,
 } from 'lucide-react';
 import { Track, TransitionAnalysis } from '../types';
 import { getCamelotColor } from '../lib/camelot';
+import { calculateTrackFit } from '../lib/aiMixEngine';
 
 interface TrackListProps {
   tracks: Track[];
@@ -28,6 +32,9 @@ interface TrackListProps {
   onToggleLock: (id: string) => void;
   onOpenAddTrackModal?: () => void;
   onOpenCreateTransitionsModal?: () => void;
+  onOpenCreateMashupModal?: (trackId?: string) => void;
+  onOpenAIMixer?: () => void;
+  onUploadAudioFiles?: (files: FileList) => void;
 }
 
 export const TrackList: React.FC<TrackListProps> = ({
@@ -41,9 +48,30 @@ export const TrackList: React.FC<TrackListProps> = ({
   onToggleLock,
   onOpenAddTrackModal,
   onOpenCreateTransitionsModal,
+  onOpenCreateMashupModal,
+  onOpenAIMixer,
+  onUploadAudioFiles,
 }) => {
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files.length > 0 && onUploadAudioFiles) {
+      onUploadAudioFiles(e.target.files);
+    }
+  };
+
   return (
     <div className="bg-slate-900/90 border border-slate-800 rounded-xl overflow-hidden shadow-2xl backdrop-blur-md">
+      {/* Hidden Native File Input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        accept="audio/*,.xml"
+        onChange={handleFileInputChange}
+        className="hidden"
+      />
+
       {/* Table Header Controls */}
       <div className="p-4 bg-slate-950/80 border-b border-slate-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
         <div className="flex items-center gap-2.5">
@@ -53,7 +81,7 @@ export const TrackList: React.FC<TrackListProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-bold text-slate-100 font-mono tracking-wider">
-                AUTO-SORTED PLAYLIST SEQUENCE
+                MY MIX SET — AUTO-SORTED SEQUENCE
               </h3>
               <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-800 text-cyan-400 border border-slate-700 font-semibold">
                 {tracks.length} Tracks
@@ -70,18 +98,38 @@ export const TrackList: React.FC<TrackListProps> = ({
             Total Duration: {Math.floor(tracks.reduce((acc, t) => acc + t.durationSeconds, 0) / 60)} mins
           </span>
 
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono bg-[#ff4e00] hover:bg-[#ff5e1a] text-black rounded-sm transition shadow-md shadow-[#ff4e00]/20 whitespace-nowrap"
+            title="Upload audio files directly to My Mix Set"
+          >
+            <Upload className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>UPLOAD AUDIO TRACKS</span>
+          </button>
+
           {onOpenAddTrackModal && (
             <button
               onClick={onOpenAddTrackModal}
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono bg-cyan-600 hover:bg-cyan-500 text-black rounded-sm transition shadow-md shadow-cyan-600/20 whitespace-nowrap"
-              title="Create or import new track to auto-sort set"
+              title="Create track manually or import XML"
             >
               <Plus className="w-3.5 h-3.5 stroke-[3]" />
-              <span>CREATE TRACK</span>
+              <span>MANUAL TRACK</span>
             </button>
           )}
 
-          {onOpenCreateTransitionsModal && (
+          {onOpenAIMixer && tracks.length > 0 && (
+            <button
+              onClick={onOpenAIMixer}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold font-mono bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black rounded-sm transition shadow-lg shadow-cyan-500/20 whitespace-nowrap"
+              title="Open AI Music Mixer & Set Fit Engine"
+            >
+              <Bot className="w-3.5 h-3.5 stroke-[2.5]" />
+              <span>AI MUSIC MIXER</span>
+            </button>
+          )}
+
+          {onOpenCreateTransitionsModal && tracks.length > 0 && (
             <button
               onClick={onOpenCreateTransitionsModal}
               className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-bold font-mono bg-[#ff4e00] hover:bg-[#ff5e1a] text-black rounded-sm transition shadow-lg shadow-[#ff4e00]/25 whitespace-nowrap animate-pulse"
@@ -103,6 +151,7 @@ export const TrackList: React.FC<TrackListProps> = ({
               <th className="py-3 px-3">Track Title & Artist</th>
               <th className="py-3 px-3 w-20 text-center">BPM</th>
               <th className="py-3 px-3 w-20 text-center">Key</th>
+              <th className="py-3 px-3 w-24 text-center">AI Fit</th>
               <th className="py-3 px-3 w-28 text-center">DES Energy</th>
               <th className="py-3 px-3 w-28 text-center">Sub-Bass</th>
               <th className="py-3 px-3">Transition Flow</th>
@@ -116,26 +165,34 @@ export const TrackList: React.FC<TrackListProps> = ({
                 <td colSpan={8} className="py-20 px-6 text-center text-slate-400 font-mono">
                   <div className="max-w-md mx-auto space-y-4">
                     <div className="w-16 h-16 rounded-2xl bg-[#ff4e00]/10 border border-[#ff4e00]/30 text-[#ff4e00] flex items-center justify-center mx-auto shadow-xl shadow-[#ff4e00]/10">
-                      <Zap className="w-8 h-8 stroke-[2.5] animate-pulse" />
+                      <Upload className="w-8 h-8 stroke-[2.5] animate-bounce" />
                     </div>
 
                     <div className="space-y-1">
                       <h4 className="text-base font-bold text-slate-100 uppercase tracking-wide">
-                        READY TO MIX YOUR UPLOADED TRACKS
+                        ADD TRACKS TO "MY MIX SET"
                       </h4>
                       <p className="text-xs text-slate-400 font-sans">
-                        Upload your audio files (.MP3, .WAV, .FLAC, .AIFF) or Rekordbox XML playlist. The system will auto-sort them harmonically and render your perfect continuous DJ set mix.
+                        Drag and drop audio files anywhere on this page, or click below to select files (.MP3, .WAV, .FLAC, .AIFF). They will be auto-sorted harmonically into your DJ set mix.
                       </p>
                     </div>
 
                     <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                      <button
+                        onClick={() => fileInputRef.current?.click()}
+                        className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3 text-xs font-bold font-mono bg-[#ff4e00] hover:bg-[#ff5e1a] text-black rounded-sm transition shadow-lg shadow-[#ff4e00]/25 uppercase"
+                      >
+                        <Upload className="w-4 h-4 stroke-[3]" />
+                        <span>UPLOAD AUDIO TRACKS TO MIX SET</span>
+                      </button>
+
                       {onOpenAddTrackModal && (
                         <button
                           onClick={onOpenAddTrackModal}
-                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold font-mono bg-[#ff4e00] hover:bg-[#ff5e1a] text-black rounded-sm transition shadow-lg shadow-[#ff4e00]/25"
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-4 py-3 text-xs font-bold font-mono bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-sm transition"
                         >
-                          <Plus className="w-4 h-4 stroke-[3]" />
-                          <span>UPLOAD AUDIO TRACKS</span>
+                          <Plus className="w-4 h-4" />
+                          <span>More Options / Import</span>
                         </button>
                       )}
                     </div>
@@ -221,6 +278,34 @@ export const TrackList: React.FC<TrackListProps> = ({
                         </span>
                       </td>
 
+                      {/* AI Fit Rating */}
+                      <td className="py-2.5 px-3 text-center">
+                        {idx === 0 ? (
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-slate-800 text-slate-400">
+                            ANCHOR
+                          </span>
+                        ) : (
+                          (() => {
+                            const prevTrack = tracks[idx - 1];
+                            const fit = calculateTrackFit(track, prevTrack);
+                            return (
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold ${
+                                  fit.overallScore >= 88
+                                    ? 'bg-emerald-950 text-emerald-400 border border-emerald-800'
+                                    : fit.overallScore >= 75
+                                    ? 'bg-cyan-950 text-cyan-400 border border-cyan-800'
+                                    : 'bg-amber-950 text-amber-400 border border-amber-800'
+                                }`}
+                                title={fit.aiInsight}
+                              >
+                                {fit.overallScore}% FIT
+                              </span>
+                            );
+                          })()
+                        )}
+                      </td>
+
                       {/* DES Energy Score */}
                       <td className="py-2.5 px-3 text-center">
                         <div className="flex flex-col items-center gap-1">
@@ -299,6 +384,16 @@ export const TrackList: React.FC<TrackListProps> = ({
                       {/* Actions */}
                       <td className="py-2.5 px-3 text-right">
                         <div className="flex items-center justify-end gap-1">
+                          {onOpenCreateMashupModal && (
+                            <button
+                              onClick={() => onOpenCreateMashupModal(track.id)}
+                              className="p-1.5 rounded-md bg-slate-800/80 hover:bg-amber-500 hover:text-slate-950 text-slate-400 transition group/mashup"
+                              title="Blend stems and create studio mashup with this track"
+                            >
+                              <Wand2 className="w-3.5 h-3.5 text-amber-400 group-hover/mashup:text-slate-950 transition-colors" />
+                            </button>
+                          )}
+
                           <button
                             onClick={() => onToggleLock(track.id)}
                             className={`p-1.5 rounded-md transition ${
