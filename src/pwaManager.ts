@@ -12,10 +12,21 @@ export function registerServiceWorker() {
         .register('/sw.js')
         .then((reg) => {
           console.log('Set Architect PWA Service Worker registered:', reg.scope);
+          // Check for service worker updates immediately
+          reg.update();
         })
         .catch((err) => {
           console.error('Service Worker registration failed:', err);
         });
+
+      // Reload page if controller changes to serve fresh assets
+      let refreshing = false;
+      navigator.serviceWorker.addEventListener('controllerchange', () => {
+        if (!refreshing) {
+          refreshing = true;
+          window.location.reload();
+        }
+      });
     });
   }
 }
