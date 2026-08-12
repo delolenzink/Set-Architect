@@ -1,0 +1,6 @@
+{
+  "name": "Set Architect",
+  "description": "Executive-grade DJ playlist set builder and auto-sorter leveraging Web Audio API analysis, Camelot harmonic intelligence, frequency overlap protection, and set blueprint energy curves.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
