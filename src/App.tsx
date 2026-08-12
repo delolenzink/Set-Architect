@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Navbar } from './components/Navbar';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
+import { MobileBottomNav } from './components/MobileBottomNav';
 import { BlueprintSelector } from './components/BlueprintSelector';
 import { EnergyTrajectoryChart } from './components/EnergyTrajectoryChart';
 import { TrackList } from './components/TrackList';
@@ -290,8 +292,11 @@ export default function App() {
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950 relative"
+      className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-cyan-500 selection:text-slate-950 relative pb-16 md:pb-0"
     >
+      {/* PWA Installation Banner */}
+      <PWAInstallBanner />
+
       {/* Drag & Drop Visual Overlay */}
       {isDragOver && (
         <div className="fixed inset-0 z-50 bg-slate-950/90 backdrop-blur-md flex flex-col items-center justify-center p-6 border-4 border-dashed border-[#ff4e00] animate-fadeIn">
@@ -433,6 +438,10 @@ export default function App() {
         onClose={() => setIsDualDeckOpen(false)}
         deckATrack={deckATrack}
         deckBTrack={deckBTrack}
+        allTracks={tracks}
+        onSelectDeckATrack={(t) => setDeckATrack(t)}
+        onSelectDeckBTrack={(t) => setDeckBTrack(t)}
+        onAddTracks={handleAddTracks}
       />
 
       <AudioImporterModal
@@ -448,6 +457,16 @@ export default function App() {
         transitions={transitions}
         blueprintName={BLUEPRINTS[selectedBlueprint].name}
         onOpenCreateTransitionsModal={handleOpenCreateMix}
+      />
+
+      {/* Mobile PWA Bottom Navigation Bar */}
+      <MobileBottomNav
+        onOpenAddTrack={() => setIsAddTrackOpen(true)}
+        onOpenCamelot={() => setIsCamelotOpen(true)}
+        onOpenDualDeck={() => setIsDualDeckOpen(true)}
+        onOpenAIMixer={() => setIsAIMixerOpen(true)}
+        onOpenExport={() => setIsExportOpen(true)}
+        trackCount={tracks.length}
       />
     </div>
   );

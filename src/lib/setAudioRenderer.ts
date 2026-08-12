@@ -1,4 +1,5 @@
 import { Track, TransitionAnalysis } from '../types';
+import { detectFirstDownbeat } from './audioAnalyzer';
 
 /**
  * Converts Camelot Key to fundamental frequency (Hz) for harmonic synth fallback
@@ -164,6 +165,8 @@ export async function renderContinuousSetAudio(
 
   // Step 1: Decode all uploaded track audio buffers if needed
   const decodedBuffers: (AudioBuffer | null)[] = [];
+  const downbeatOnsets: number[] = [];
+
   for (let i = 0; i < tracks.length; i++) {
     const track = tracks[i];
     onProgress?.(
@@ -174,64 +177,80 @@ export async function renderContinuousSetAudio(
       onProgress?.(2 + Math.floor((i / tracks.length) * 15), msg);
     });
     decodedBuffers.push(buffer);
+
+    const onset = buffer ? detectFirstDownbeat(buffer) : 0;
+    downbeatOnsets.push(onset);
   }
 
   onProgress?.(18, 'Calculating beat-grid alignments & sub-bass swap schedules...');
 
-  // Step 2: Calculate track durations, phrase overlaps, and grid-aligned start times
+  // Target set BPM calculation (defaults to first track BPM or average BPM across set)
+  const masterBpm = tracks[0]?.bpm || 124;
+
   const trackDurations: number[] = [];
   const overlaps: number[] = [];
-  const targetMixBpms: number[] = [];
+  const playbackRates: number[] = [];
 
   for (let i = 0; i < tracks.length; i++) {
     const buf = decodedBuffers[i];
     const track = tracks[i];
-    let duration = buf ? buf.duration : track.durationSeconds || 300;
+    const nativeBpm = track.bpm || masterBpm;
+    
+    // Calculate playback rate so all tracks in transition blend at masterBpm
+    const rate = masterBpm / nativeBpm;
+    playbackRates.push(rate);
+
+    let rawDur = buf ? buf.duration : track.durationSeconds || 300;
 
     if (mixMode === 'SHORT_EDIT') {
-      duration = Math.min(120, duration);
+      rawDur = Math.min(120, rawDur);
     } else if (mixMode === 'MINI_TEASER') {
-      duration = Math.min(35, duration);
+      rawDur = Math.min(35, rawDur);
     }
 
-    trackDurations.push(duration);
+    // Timeline duration adjusted for playback rate
+    const playDurOnTimeline = rawDur / rate;
+    trackDurations.push(playDurOnTimeline);
 
-    const bpm = track.bpm || 124;
-    targetMixBpms.push(bpm);
-
-    // Calculate phrase-aligned overlap in beats:
+    // Phrase-aligned overlap in beats:
     // 32 beats (8 bars) for full tracks, 16 beats for short edit, 8 beats for teaser
     let phraseBeats = 32;
     if (mixMode === 'SHORT_EDIT') phraseBeats = 16;
     if (mixMode === 'MINI_TEASER') phraseBeats = 8;
 
-    // Convert beats to exact seconds based on current track BPM
-    const beatSec = 60 / bpm;
+    const beatSec = 60 / masterBpm;
     let overlapSec = phraseBeats * beatSec;
 
     // Safety constraint: overlap shouldn't exceed 25% of track duration
-    if (overlapSec > duration * 0.25) {
-      overlapSec = Math.floor((duration * 0.25) / beatSec) * beatSec;
+    if (overlapSec > playDurOnTimeline * 0.25) {
+      overlapSec = Math.floor((playDurOnTimeline * 0.25) / beatSec) * beatSec;
     }
 
     overlaps.push(i < tracks.length - 1 ? overlapSec : 0);
   }
 
-  // Calculate grid-snapped timeline start times
+  // Calculate 100% Phase-Aligned & Downbeat-Synced Timeline Start Times
   const startTimes: number[] = [0];
+  const beatSec = 60 / masterBpm;
+
   for (let i = 1; i < tracks.length; i++) {
     const prevStart = startTimes[i - 1];
     const prevDur = trackDurations[i - 1];
     const prevOverlap = overlaps[i - 1];
+    const prevOnsetTimeline = downbeatOnsets[i - 1] / playbackRates[i - 1];
 
-    // Align start time exactly on a beat boundary of the previous track
-    const prevBpm = targetMixBpms[i - 1];
-    const prevBeatSec = 60 / prevBpm;
+    const currOnsetTimeline = downbeatOnsets[i] / playbackRates[i];
 
-    const rawStart = prevStart + prevDur - prevOverlap;
-    const snappedStart = Math.round(rawStart / prevBeatSec) * prevBeatSec;
+    // Unsnapped mix-in point (transition start)
+    const rawMixIn = prevStart + prevDur - prevOverlap;
 
-    startTimes.push(snappedStart);
+    // Snap mix-in point to exact downbeat grid of previous track
+    const beatIndex = Math.round((rawMixIn - (prevStart + prevOnsetTimeline)) / beatSec);
+    const snappedMixIn = (prevStart + prevOnsetTimeline) + beatIndex * beatSec;
+
+    // Set current track timeline start time so its downbeat aligns exactly at snappedMixIn
+    const currStartTime = Math.max(0, snappedMixIn - currOnsetTimeline);
+    startTimes.push(currStartTime);
   }
 
   const totalDurationSeconds =
@@ -259,24 +278,26 @@ export async function renderContinuousSetAudio(
   const fadeInCurve = createEqualPowerFadeInCurve();
   const fadeOutCurve = createEqualPowerFadeOutCurve();
 
-  // Step 3: Process each track and schedule audio nodes
+  // Step 3: Schedule audio nodes for beat-matched playback
   for (let i = 0; i < tracks.length; i++) {
     const track = tracks[i];
     const audioBuf = decodedBuffers[i];
     const startTime = startTimes[i];
-    const playDuration = trackDurations[i];
+    const playDurTimeline = trackDurations[i];
+    const rate = playbackRates[i];
+
     const overlapIn = i > 0 ? overlaps[i - 1] : 0;
     const overlapOut = overlaps[i];
-    const endTime = startTime + playDuration;
+    const endTime = startTime + playDurTimeline;
 
     onProgress?.(
       20 + Math.floor((i / tracks.length) * 55),
-      `Beat-Syncing Track ${i + 1}/${tracks.length}: "${track.title}" (${track.key.code}, ${track.bpm} BPM)...`
+      `Beat-Syncing Track ${i + 1}/${tracks.length}: "${track.title}" (${track.key.code}, ${track.bpm} BPM @ ${masterBpm} BPM)...`
     );
 
     const trackGain = offlineCtx.createGain();
 
-    // Equal-Power Volume Envelope Scheduling for Seamless Crossfades
+    // Equal-Power Volume Envelope Scheduling
     if (i === 0) {
       trackGain.gain.setValueAtTime(1.0, startTime);
     } else if (overlapIn > 0) {
@@ -289,7 +310,7 @@ export async function renderContinuousSetAudio(
       // Smooth Equal-Power Fade-Out over the next track's overlap window
       trackGain.gain.setValueCurveAtTime(fadeOutCurve, fadeOutStart, overlapOut);
     } else {
-      // Final track end fade out (last 2.5 seconds)
+      // Final track end fade out
       const finalFadeStart = Math.max(startTime, endTime - 2.5);
       trackGain.gain.setValueAtTime(1.0, finalFadeStart);
       trackGain.gain.linearRampToValueAtTime(0.0001, endTime);
@@ -331,32 +352,11 @@ export async function renderContinuousSetAudio(
       const src = offlineCtx.createBufferSource();
       src.buffer = audioBuf;
 
-      // Precise Beat-Sync Tempo Matching
-      // Align incoming track playback rate to match previous track tempo during transition
-      if (i > 0) {
-        const prevBpm = targetMixBpms[i - 1];
-        const currBpm = track.bpm || 124;
-
-        if (prevBpm && currBpm) {
-          const bpmRatio = prevBpm / currBpm;
-          // Match tempo during the crossfade transition
-          src.playbackRate.setValueAtTime(bpmRatio, startTime);
-
-          // Gently ramp back to native BPM over 16 beats after the transition completes
-          const beatSec = 60 / currBpm;
-          const rampDuration = 16 * beatSec;
-          const rampStart = startTime + overlapIn;
-          const rampEnd = Math.min(endTime - overlapOut, rampStart + rampDuration);
-
-          if (rampEnd > rampStart) {
-            src.playbackRate.setValueAtTime(bpmRatio, rampStart);
-            src.playbackRate.linearRampToValueAtTime(1.0, rampEnd);
-          }
-        }
-      }
+      // Lock playback rate to masterBpm for 100% beat-matched phase alignment
+      src.playbackRate.setValueAtTime(rate, startTime);
 
       src.connect(hpFilter);
-      src.start(startTime, 0, playDuration);
+      src.start(startTime, 0, playDurTimeline * rate);
     } else {
       // Synthetic Studio Sound Fallback for manual tracks without audio files
       generateSyntheticTrackAudio(
@@ -364,7 +364,7 @@ export async function renderContinuousSetAudio(
         hpFilter,
         track,
         startTime,
-        playDuration,
+        playDurTimeline,
         sampleRate
       );
     }
@@ -387,6 +387,7 @@ export async function renderContinuousSetAudio(
     durationSeconds: totalDurationSeconds,
   };
 }
+
 
 /**
  * Generates rhythmic electronic elements (Kick, Sub-Bass, Hi-Hats, Melodic Pad) for synthetic tracks

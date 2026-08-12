@@ -228,3 +228,43 @@ export function generateSyntheticTrackAnalysis(
     waveformPeaks,
   };
 }
+
+/**
+ * Detects the first strong downbeat/kick transient onset time in seconds
+ */
+export function detectFirstDownbeat(buffer: AudioBuffer): number {
+  if (!buffer || buffer.length === 0) return 0;
+
+  const data = buffer.getChannelData(0);
+  const sampleRate = buffer.sampleRate;
+  const windowSize = Math.floor(sampleRate * 0.01); // 10ms frame window
+  const maxSearchSamples = Math.min(buffer.length, Math.floor(sampleRate * 12.0)); // Search first 12 seconds
+
+  let maxEnergy = 0;
+  const energies: number[] = [];
+
+  for (let i = 0; i < maxSearchSamples; i += windowSize) {
+    let sum = 0;
+    const end = Math.min(i + windowSize, maxSearchSamples);
+    for (let j = i; j < end; j++) {
+      sum += data[j] * data[j];
+    }
+    const rms = Math.sqrt(sum / (end - i));
+    energies.push(rms);
+    if (rms > maxEnergy) maxEnergy = rms;
+  }
+
+  if (maxEnergy < 0.005) return 0; // Silent or very quiet intro
+
+  // Find first frame that exceeds 18% of peak energy (kick transient onset)
+  const threshold = maxEnergy * 0.18;
+  for (let idx = 0; idx < energies.length; idx++) {
+    if (energies[idx] >= threshold) {
+      const sampleIndex = idx * windowSize;
+      return sampleIndex / sampleRate;
+    }
+  }
+
+  return 0;
+}
+

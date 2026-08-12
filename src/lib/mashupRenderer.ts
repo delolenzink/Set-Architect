@@ -187,7 +187,7 @@ export async function renderMashupAudio(
   if (autoAlignBeatGrid && bufferA && processedBufferB) {
     const onsetA = detectFirstDownbeat(bufferA);
     const onsetB = detectFirstDownbeat(processedBufferB);
-    autoOnsetCorrection = onsetA - onsetB;
+    autoOnsetCorrection = (onsetA / rateA) - (onsetB / rateB);
   }
 
   const nudgeSec = beatNudgeMs / 1000;
