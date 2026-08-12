@@ -52,8 +52,8 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   };
 
   const handleExportRekordboxXml = () => {
-    const xmlContent = generateRekordboxXml(tracks, `Set Architect - ${blueprintName}`);
-    downloadFile(xmlContent, 'SetArchitect_Rekordbox.xml', 'text/xml');
+    const xmlContent = generateRekordboxXml(tracks, `Set Architect by AfroSenses - ${blueprintName}`);
+    downloadFile(xmlContent, 'SetArchitect_AfroSenses_Rekordbox.xml', 'text/xml');
   };
 
   const handleExportM3u8 = () => {
@@ -84,7 +84,7 @@ export const ExportModal: React.FC<ExportModalProps> = ({
             </div>
             <div>
               <h3 className="text-lg font-bold text-slate-100 font-mono">
-                EXPORT ARCHITECT SET
+                EXPORT SET ARCHITECT BY AFROSENSES
               </h3>
               <p className="text-xs text-slate-400">
                 Export sorted sequence to DJ hardware, Rekordbox, or cue sheets

@@ -1,7 +1,7 @@
 {
-  "name": "Set Architect - Harmonic DJ Set Builder",
-  "short_name": "SetArchitect",
-  "description": "Professional Harmonic DJ Set Builder, Stem Mashup Blender, and Dual Deck Practice Console for Desktop and Mobile DJs.",
+  "name": "Set Architect by AfroSenses",
+  "short_name": "Set Architect",
+  "description": "Professional Harmonic DJ Set Builder, Stem Mashup Blender, and Dual Deck Practice Console for Desktop and Mobile DJs by AfroSenses.",
   "start_url": "./",
   "id": "./",
   "display": "standalone",

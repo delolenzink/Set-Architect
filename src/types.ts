@@ -96,3 +96,21 @@ export interface Crate {
   blueprint: BlueprintType;
   createdAt: string;
 }
+
+export type RegistrationStatus = 'PENDING' | 'APPROVED' | 'DECLINED';
+
+export interface DJRegistration {
+  id: string;
+  djName: string;
+  realName: string;
+  email: string;
+  genres: string;
+  location: string;
+  experience: string;
+  mixUrl?: string;
+  status: RegistrationStatus;
+  createdAt: string;
+  reviewedAt?: string;
+  declineReason?: string;
+  password?: string;
+}

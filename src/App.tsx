@@ -14,9 +14,11 @@ import { CreateTransitionsModal } from './components/CreateTransitionsModal';
 import { CreateMashupModal } from './components/CreateMashupModal';
 import { AIMusicMixerModal } from './components/AIMusicMixerModal';
 import { ExportModal } from './components/ExportModal';
+import { DJRegistrationModal } from './components/DJRegistrationModal';
+import { AdminModal } from './components/AdminModal';
 import { Upload, Sparkles } from 'lucide-react';
 
-import { BlueprintType, Crate, SortingParameters, Track } from './types';
+import { BlueprintType, Crate, DJRegistration, SortingParameters, Track } from './types';
 import { sortPlaylist, BLUEPRINTS } from './lib/sortingAlgorithm';
 import { analyzeAudioFile } from './lib/audioAnalyzer';
 import { parseRekordboxXml } from './lib/exporters';
@@ -69,6 +71,12 @@ export default function App() {
   const [isAIMixerOpen, setIsAIMixerOpen] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [isDualDeckOpen, setIsDualDeckOpen] = useState(false);
+  const [isDJRegistrationOpen, setIsDJRegistrationOpen] = useState(false);
+  const [djModalTab, setDjModalTab] = useState<'REGISTER' | 'STATUS'>('REGISTER');
+  const [isAdminOpen, setIsAdminOpen] = useState(false);
+
+  const [activeDJ, setActiveDJ] = useState<DJRegistration | null>(null);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
 
   const [selectedTransitionIdx, setSelectedTransitionIdx] = useState<number | null>(null);
   const [deckATrack, setDeckATrack] = useState<Track | null>(null);
@@ -334,6 +342,17 @@ export default function App() {
         onOpenExportModal={() => setIsExportOpen(true)}
         onOpenDualDeck={() => setIsDualDeckOpen(true)}
         onOpenAIMixer={() => setIsAIMixerOpen(true)}
+        onOpenRegister={() => {
+          setDjModalTab('REGISTER');
+          setIsDJRegistrationOpen(true);
+        }}
+        onOpenLogin={() => {
+          setDjModalTab('STATUS');
+          setIsDJRegistrationOpen(true);
+        }}
+        onOpenAdmin={() => setIsAdminOpen(true)}
+        activeDJName={activeDJ?.djName}
+        isAdminLoggedIn={isAdminAuthenticated}
         onRunSort={handleRunSort}
         isSorting={isSorting}
         trackCount={tracks.length}
@@ -457,6 +476,23 @@ export default function App() {
         transitions={transitions}
         blueprintName={BLUEPRINTS[selectedBlueprint].name}
         onOpenCreateTransitionsModal={handleOpenCreateMix}
+      />
+
+      <DJRegistrationModal
+        isOpen={isDJRegistrationOpen}
+        onClose={() => setIsDJRegistrationOpen(false)}
+        onDJLoginSuccess={(dj) => setActiveDJ(dj)}
+        initialTab={djModalTab}
+      />
+
+      <AdminModal
+        isOpen={isAdminOpen}
+        onClose={() => setIsAdminOpen(false)}
+        isAdminAuthenticated={isAdminAuthenticated}
+        onAdminLogin={(success) => setIsAdminAuthenticated(success)}
+        onAdminLogout={() => setIsAdminAuthenticated(false)}
+        trackCount={tracks.length}
+        crateCount={crates.length}
       />
 
       {/* Mobile PWA Bottom Navigation Bar */}

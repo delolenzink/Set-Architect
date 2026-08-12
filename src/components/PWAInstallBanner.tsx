@@ -19,7 +19,7 @@ export const PWAInstallBanner: React.FC = () => {
               <Download className="w-3.5 h-3.5" />
             </div>
             <span>
-              <strong>Install Set Architect DJ App</strong> — Run standalone on desktop & mobile with zero latency.
+              <strong>Install Set Architect by AfroSenses</strong> — Run standalone on desktop & mobile with zero latency.
             </span>
           </div>
 
@@ -73,7 +73,7 @@ export const PWAInstallBanner: React.FC = () => {
             </div>
 
             <p className="text-xs text-slate-300 leading-relaxed">
-              To install <strong>Set Architect</strong> on your iOS device for full-screen DJ performance:
+              To install <strong>Set Architect by AfroSenses</strong> on your iOS device for full-screen DJ performance:
             </p>
 
             <ol className="space-y-3 text-xs text-slate-300 bg-slate-950 p-4 rounded-xl border border-slate-800">

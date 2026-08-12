@@ -8,9 +8,12 @@ import {
   Plus,
   Sparkles,
   Zap,
-  Wand2,
   Bot,
   RefreshCw,
+  UserPlus,
+  LogIn,
+  Shield,
+  User,
 } from 'lucide-react';
 import { Crate } from '../types';
 import { Logo } from './Logo';
@@ -25,6 +28,11 @@ interface NavbarProps {
   onOpenExportModal: () => void;
   onOpenDualDeck: () => void;
   onOpenAIMixer?: () => void;
+  onOpenRegister: () => void;
+  onOpenLogin: () => void;
+  onOpenAdmin: () => void;
+  activeDJName?: string | null;
+  isAdminLoggedIn?: boolean;
   onRunSort: () => void;
   isSorting: boolean;
   trackCount: number;
@@ -40,6 +48,11 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenExportModal,
   onOpenDualDeck,
   onOpenAIMixer,
+  onOpenRegister,
+  onOpenLogin,
+  onOpenAdmin,
+  activeDJName,
+  isAdminLoggedIn,
   onRunSort,
   isSorting,
   trackCount,
@@ -51,14 +64,14 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4">
         {/* Logo & Identity */}
         <div className="flex items-center gap-3">
-          <Logo size={42} showBackground={true} />
+          <Logo size={56} showBackground={true} />
 
-          <div>
+          <div className="flex flex-col justify-center">
             <div className="flex items-center gap-2">
-              <h1 className="text-xl font-bold tracking-wider text-slate-100 font-mono">
+              <h1 className="text-base sm:text-lg font-bold tracking-wider text-slate-100 font-mono leading-tight">
                 SET ARCHITECT
               </h1>
-              <span className="px-2 py-0.5 text-[10px] font-mono font-semibold tracking-wider text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 rounded-full">
+              <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold tracking-wider text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 rounded-full">
                 v1.0 EXEC
               </span>
               <button
@@ -83,9 +96,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <RefreshCw className="w-3.5 h-3.5" />
               </button>
             </div>
-            <p className="text-xs text-slate-400 hidden sm:block">
-              Executive Harmonic & Dynamic Playlist Auto-Sorter
-            </p>
+            <span className="text-xs font-sans font-semibold text-cyan-400 tracking-wide leading-tight mt-0.5">
+              by AfroSenses
+            </span>
           </div>
         </div>
 
@@ -128,8 +141,46 @@ export const Navbar: React.FC<NavbarProps> = ({
           </button>
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 w-full md:w-auto justify-end">
+        {/* Action Controls & DJ / Admin Portals */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-end overflow-x-auto py-1">
+          {/* Register Button */}
+          <button
+            onClick={onOpenRegister}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono rounded-lg transition border whitespace-nowrap bg-gradient-to-r from-cyan-950/80 to-blue-950/80 hover:from-cyan-900/80 hover:to-blue-900/80 text-cyan-300 border-cyan-800/60"
+            title="Register as a DJ on AfroSenses"
+          >
+            <UserPlus className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Register</span>
+          </button>
+
+          {/* Login Button */}
+          <button
+            onClick={onOpenLogin}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono rounded-lg transition border whitespace-nowrap ${
+              activeDJName
+                ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/50 hover:bg-emerald-900/80'
+                : 'bg-slate-900 hover:bg-slate-800 text-slate-200 border-slate-700/80'
+            }`}
+            title="Sign into DJ Portal or check status"
+          >
+            <LogIn className="w-3.5 h-3.5 text-cyan-400" />
+            <span>{activeDJName ? `DJ: ${activeDJName}` : 'Login'}</span>
+          </button>
+
+          {/* Admin Button */}
+          <button
+            onClick={onOpenAdmin}
+            className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono rounded-lg transition border whitespace-nowrap ${
+              isAdminLoggedIn
+                ? 'bg-amber-500 text-black border-amber-400 shadow-md shadow-amber-500/20'
+                : 'bg-slate-900 hover:bg-slate-800 text-amber-400 border-amber-900/60'
+            }`}
+            title="Open Admin Monitoring & DJ Approval Panel"
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>{isAdminLoggedIn ? 'Admin (Active)' : 'Admin'}</span>
+          </button>
+
           {onOpenAIMixer && (
             <button
               onClick={onOpenAIMixer}
@@ -137,7 +188,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               title="Open AI Music Mixer & Set Fit Radar"
             >
               <Bot className="w-3.5 h-3.5 stroke-[2.5]" />
-              <span>AI Music Mixer</span>
+              <span className="hidden xl:inline">AI Music Mixer</span>
             </button>
           )}
 
@@ -147,7 +198,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="View Camelot Key Radar & Distribution"
           >
             <Compass className="w-3.5 h-3.5" />
-            <span className="hidden lg:inline">Camelot Radar</span>
+            <span className="hidden xl:inline">Camelot</span>
           </button>
 
           <button
@@ -156,7 +207,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             title="Audition transitions live with Dual Deck crossfader & EQ"
           >
             <Zap className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">Dual Deck Audition</span>
+            <span className="hidden sm:inline">Dual Deck</span>
           </button>
 
           <button
@@ -177,10 +228,11 @@ export const Navbar: React.FC<NavbarProps> = ({
             }`}
           >
             <Sparkles className={`w-3.5 h-3.5 ${isSorting ? 'animate-spin' : ''}`} />
-            <span>{isSorting ? 'Analyzing...' : 'Auto-Sort Set'}</span>
+            <span>{isSorting ? 'Sorting...' : 'Auto-Sort'}</span>
           </button>
         </div>
       </div>
     </header>
   );
 };
+
