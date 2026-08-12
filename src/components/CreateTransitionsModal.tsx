@@ -15,7 +15,7 @@ import {
   Volume2,
 } from 'lucide-react';
 import { Track, TransitionAnalysis } from '../types';
-import { renderContinuousSetAudio } from '../lib/setAudioRenderer';
+import { renderContinuousSetAudio, MixMode } from '../lib/setAudioRenderer';
 
 interface CreateTransitionsModalProps {
   isOpen: boolean;
@@ -32,6 +32,7 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
   transitions,
   blueprintName,
 }) => {
+  const [mixMode, setMixMode] = useState<MixMode>('FULL_TRACKS');
   const [isRendering, setIsRendering] = useState(false);
   const [progressPercent, setProgressPercent] = useState(0);
   const [statusMessage, setStatusMessage] = useState('');
@@ -50,10 +51,15 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
     setRenderedAudioUrl(null);
 
     try {
-      const result = await renderContinuousSetAudio(tracks, transitions, (percent, status) => {
-        setProgressPercent(percent);
-        setStatusMessage(status);
-      });
+      const result = await renderContinuousSetAudio(
+        tracks,
+        transitions,
+        (percent, status) => {
+          setProgressPercent(percent);
+          setStatusMessage(status);
+        },
+        mixMode
+      );
 
       setRenderedAudioUrl(result.url);
       setRenderedDuration(result.durationSeconds);
@@ -162,26 +168,82 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
 
           {/* Action Trigger Area */}
           {!renderedAudioUrl && !isRendering && (
-            <div className="p-6 bg-[#131318] border border-[#282832] rounded-sm text-center space-y-4">
-              <div className="w-14 h-14 rounded-full bg-[#ff4e00]/10 border border-[#ff4e00]/40 text-[#ff4e00] flex items-center justify-center mx-auto shadow-xl shadow-[#ff4e00]/10 animate-pulse">
-                <Sparkles className="w-7 h-7" />
+            <div className="p-6 bg-[#131318] border border-[#282832] rounded-sm space-y-5">
+              <div className="text-center space-y-2">
+                <div className="w-12 h-12 rounded-full bg-[#ff4e00]/10 border border-[#ff4e00]/40 text-[#ff4e00] flex items-center justify-center mx-auto shadow-xl shadow-[#ff4e00]/10 animate-pulse">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <h4 className="text-sm font-bold text-white font-mono uppercase tracking-wide">
+                  Mix Format & Track Duration
+                </h4>
+                <p className="text-xs text-[#888] max-w-md mx-auto">
+                  Renders your uploaded songs into a continuous DJ set mix with key-matched crossfades and sub-bass management.
+                </p>
               </div>
 
-              <div>
-                <h4 className="text-sm font-bold text-white font-mono uppercase tracking-wide">
-                  Ready to Render Seamless DJ Transitions
-                </h4>
-                <p className="text-xs text-[#888] max-w-md mx-auto mt-1">
-                  Executes key-matched EQ crossfades, sub-bass swaps, and beat-aligned energy curves across all {tracks.length} tracks into one continuous audio master file.
-                </p>
+              {/* Mix Mode Selection Buttons */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-xs">
+                <button
+                  type="button"
+                  onClick={() => setMixMode('FULL_TRACKS')}
+                  className={`p-3 rounded border text-left transition-all ${
+                    mixMode === 'FULL_TRACKS'
+                      ? 'bg-[#ff4e00]/15 border-[#ff4e00] text-white shadow-lg shadow-[#ff4e00]/10'
+                      : 'bg-[#1a1a20] border-[#2a2a35] text-[#888] hover:text-white hover:bg-[#22222a]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#ff4e00]">FULL SONGS MIX</span>
+                    {mixMode === 'FULL_TRACKS' && <CheckCircle2 className="w-3.5 h-3.5 text-[#ff4e00]" />}
+                  </div>
+                  <span className="text-[10px] text-[#aaa] block mt-1">
+                    Mixes entire length of all uploaded audio tracks
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMixMode('SHORT_EDIT')}
+                  className={`p-3 rounded border text-left transition-all ${
+                    mixMode === 'SHORT_EDIT'
+                      ? 'bg-[#ff4e00]/15 border-[#ff4e00] text-white shadow-lg shadow-[#ff4e00]/10'
+                      : 'bg-[#1a1a20] border-[#2a2a35] text-[#888] hover:text-white hover:bg-[#22222a]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-cyan-400">2-MIN RADIO EDIT</span>
+                    {mixMode === 'SHORT_EDIT' && <CheckCircle2 className="w-3.5 h-3.5 text-cyan-400" />}
+                  </div>
+                  <span className="text-[10px] text-[#aaa] block mt-1">
+                    Blends 2 minutes per track for fast-paced sets
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setMixMode('MINI_TEASER')}
+                  className={`p-3 rounded border text-left transition-all ${
+                    mixMode === 'MINI_TEASER'
+                      ? 'bg-[#ff4e00]/15 border-[#ff4e00] text-white shadow-lg shadow-[#ff4e00]/10'
+                      : 'bg-[#1a1a20] border-[#2a2a35] text-[#888] hover:text-white hover:bg-[#22222a]'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-amber-400">30S TEASER MIX</span>
+                    {mixMode === 'MINI_TEASER' && <CheckCircle2 className="w-3.5 h-3.5 text-amber-400" />}
+                  </div>
+                  <span className="text-[10px] text-[#aaa] block mt-1">
+                    Quick 30-second snippet mix per track
+                  </span>
+                </button>
               </div>
 
               <button
                 onClick={handleStartRender}
-                className="w-full sm:w-auto px-8 py-3.5 bg-[#ff4e00] hover:bg-[#ff5e1a] active:scale-[0.98] text-black font-mono font-bold text-sm tracking-wider uppercase rounded-sm transition-all shadow-xl shadow-[#ff4e00]/30 flex items-center justify-center gap-2 mx-auto"
+                className="w-full py-3.5 bg-[#ff4e00] hover:bg-[#ff5e1a] active:scale-[0.98] text-black font-mono font-bold text-sm tracking-wider uppercase rounded-sm transition-all shadow-xl shadow-[#ff4e00]/30 flex items-center justify-center gap-2"
               >
                 <Zap className="w-5 h-5 fill-current stroke-[2.5]" />
-                <span>CREATE MIX NOW</span>
+                <span>CREATE FULL MIX NOW</span>
               </button>
             </div>
           )}

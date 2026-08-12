@@ -4,13 +4,9 @@ import {
   FileCode,
   FolderPlus,
   X,
-  Layers,
   Sparkles,
-  CheckCircle,
-  Music,
 } from 'lucide-react';
-import { Crate, Track } from '../types';
-import { DEMO_CRATES } from '../data/demoCrates';
+import { Track } from '../types';
 import { parseRekordboxXml } from '../lib/exporters';
 import { analyzeAudioFile } from '../lib/audioAnalyzer';
 
@@ -25,7 +21,7 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
   onClose,
   onAddTracks,
 }) => {
-  const [activeTab, setActiveTab] = useState<'FILES' | 'XML' | 'DEMO'>('FILES');
+  const [activeTab, setActiveTab] = useState<'FILES' | 'XML'>('FILES');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
 
@@ -69,6 +65,7 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
         waveformPeaks: analysis.waveformPeaks || [],
         fileName: file.name,
         fileObject: file,
+        audioBuffer: analysis.audioBuffer,
       });
     }
 
@@ -96,12 +93,6 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
       }
     };
     reader.readAsText(file);
-  };
-
-  // Select Demo Crate
-  const handleSelectDemoCrate = (crate: Crate) => {
-    onAddTracks(crate.tracks, crate.name);
-    onClose();
   };
 
   return (
@@ -153,17 +144,6 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
             }`}
           >
             <FileCode className="w-4 h-4" /> Rekordbox XML
-          </button>
-
-          <button
-            onClick={() => setActiveTab('DEMO')}
-            className={`flex-1 py-2.5 border-b-2 text-center font-bold transition flex items-center justify-center gap-2 ${
-              activeTab === 'DEMO'
-                ? 'border-cyan-400 text-cyan-400 bg-cyan-950/30'
-                : 'border-transparent text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            <Sparkles className="w-4 h-4" /> Executive Demo Crates
           </button>
         </div>
 
@@ -225,32 +205,6 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
                   </p>
                 </div>
               </div>
-            </div>
-          )}
-
-          {activeTab === 'DEMO' && (
-            <div className="space-y-3">
-              {DEMO_CRATES.map((crate) => (
-                <div
-                  key={crate.id}
-                  onClick={() => handleSelectDemoCrate(crate)}
-                  className="p-4 rounded-xl bg-slate-950 border border-slate-800 hover:border-cyan-500/80 cursor-pointer transition flex items-center justify-between group"
-                >
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-slate-100 group-hover:text-cyan-400 transition-colors">
-                        {crate.name}
-                      </h4>
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-cyan-950 text-cyan-400 border border-cyan-800">
-                        {crate.tracks.length} Tracks
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-400 line-clamp-1">{crate.description}</p>
-                  </div>
-
-                  <Sparkles className="w-5 h-5 text-slate-600 group-hover:text-cyan-400 transition-colors shrink-0" />
-                </div>
-              ))}
             </div>
           )}
 

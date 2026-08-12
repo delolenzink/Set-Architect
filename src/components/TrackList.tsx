@@ -113,17 +113,33 @@ export const TrackList: React.FC<TrackListProps> = ({
           <tbody className="divide-y divide-slate-800/60 font-sans text-slate-200">
             {tracks.length === 0 ? (
               <tr>
-                <td colSpan={8} className="py-16 text-center text-slate-400 font-mono space-y-3">
-                  <p className="text-sm text-slate-300">Playlist is empty. Add tracks to auto-sort your set.</p>
-                  {onOpenAddTrackModal && (
-                    <button
-                      onClick={onOpenAddTrackModal}
-                      className="inline-flex items-center gap-2 px-4 py-2 text-xs font-bold font-mono bg-[#ff4e00] hover:bg-[#ff5e1a] text-black rounded-sm transition shadow-lg shadow-[#ff4e00]/20"
-                    >
-                      <Plus className="w-4 h-4 stroke-[3]" />
-                      <span>ADD TRACKS & AUTO-SORT</span>
-                    </button>
-                  )}
+                <td colSpan={8} className="py-20 px-6 text-center text-slate-400 font-mono">
+                  <div className="max-w-md mx-auto space-y-4">
+                    <div className="w-16 h-16 rounded-2xl bg-[#ff4e00]/10 border border-[#ff4e00]/30 text-[#ff4e00] flex items-center justify-center mx-auto shadow-xl shadow-[#ff4e00]/10">
+                      <Zap className="w-8 h-8 stroke-[2.5] animate-pulse" />
+                    </div>
+
+                    <div className="space-y-1">
+                      <h4 className="text-base font-bold text-slate-100 uppercase tracking-wide">
+                        READY TO MIX YOUR UPLOADED TRACKS
+                      </h4>
+                      <p className="text-xs text-slate-400 font-sans">
+                        Upload your audio files (.MP3, .WAV, .FLAC, .AIFF) or Rekordbox XML playlist. The system will auto-sort them harmonically and render your perfect continuous DJ set mix.
+                      </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row items-center justify-center gap-3 pt-2">
+                      {onOpenAddTrackModal && (
+                        <button
+                          onClick={onOpenAddTrackModal}
+                          className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-2.5 text-xs font-bold font-mono bg-[#ff4e00] hover:bg-[#ff5e1a] text-black rounded-sm transition shadow-lg shadow-[#ff4e00]/25"
+                        >
+                          <Plus className="w-4 h-4 stroke-[3]" />
+                          <span>UPLOAD AUDIO TRACKS</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
                 </td>
               </tr>
             ) : (

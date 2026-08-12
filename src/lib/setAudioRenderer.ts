@@ -1,22 +1,9 @@
 import { Track, TransitionAnalysis } from '../types';
 
 /**
- * Converts Camelot Key to fundamental frequency (Hz) for harmonic synth generation
+ * Converts Camelot Key to fundamental frequency (Hz) for harmonic synth fallback
  */
 function camelotToFrequency(keyNumber: number, isMinor: boolean): number {
-  // Mapping Camelot numbers to root note frequencies in Octave 2/3 (Bass range)
-  // 1A/1B = Ab/G# (103.8 Hz)
-  // 2A/2B = Eb/D# (77.78 Hz)
-  // 3A/3B = Bb/A# (116.54 Hz)
-  // 4A/4B = F (87.31 Hz)
-  // 5A/5B = C (130.81 Hz)
-  // 6A/6B = G (98.00 Hz)
-  // 7A/7B = D (146.83 Hz)
-  // 8A/8B = A (110.00 Hz)
-  // 9A/9B = E (82.41 Hz)
-  // 10A/10B = B (123.47 Hz)
-  // 11A/11B = F# (92.50 Hz)
-  // 12A/12B = C# (138.59 Hz)
   const baseFreqs: Record<number, number> = {
     1: 103.83,
     2: 77.78,
@@ -33,7 +20,7 @@ function camelotToFrequency(keyNumber: number, isMinor: boolean): number {
   };
 
   const base = baseFreqs[keyNumber] || 110.0;
-  return isMinor ? base : base * 1.25; // Major 3rd tilt
+  return isMinor ? base : base * 1.25;
 }
 
 /**
@@ -59,15 +46,6 @@ export function audioBufferToWav(buffer: AudioBuffer): Blob {
     for (let i = 0; i < str.length; i++) {
       out.setUint8(pos++, str.charCodeAt(i));
     }
-  }
-
-  function writeUint32(val: number) {
-    out.setUint32(pos, val, true);
-    pos += 4;
-  }
-
-  function writeUint16(val: number) {
-    out.setUint16(val, val, true); // bugfix parameter order
   }
 
   // RIFF chunk descriptor
@@ -117,26 +95,98 @@ export function audioBufferToWav(buffer: AudioBuffer): Blob {
 }
 
 /**
+ * Ensures track audioBuffer is loaded/decoded if a fileObject exists
+ */
+async function ensureTrackAudioBuffer(
+  track: Track,
+  onStatus?: (msg: string) => void
+): Promise<AudioBuffer | null> {
+  if (track.audioBuffer) return track.audioBuffer;
+
+  if (track.fileObject) {
+    onStatus?.(`Decoding uploaded audio: "${track.fileName || track.title}"...`);
+    try {
+      const arrayBuffer = await track.fileObject.arrayBuffer();
+      const audioCtx = new (window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
+      const decodedBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+      track.audioBuffer = decodedBuffer;
+      return decodedBuffer;
+    } catch (err) {
+      console.warn(`Failed to decode file audio for "${track.title}":`, err);
+    }
+  }
+
+  return null;
+}
+
+export type MixMode = 'FULL_TRACKS' | 'SHORT_EDIT' | 'MINI_TEASER';
+
+/**
  * Renders a full continuous DJ set mix using Web Audio OfflineAudioContext
+ * Blends uploaded audio tracks seamlessly with crossfades and EQ management.
  */
 export async function renderContinuousSetAudio(
   tracks: Track[],
   transitions: TransitionAnalysis[],
-  onProgress?: (percent: number, status: string) => void
+  onProgress?: (percent: number, status: string) => void,
+  mixMode: MixMode = 'FULL_TRACKS'
 ): Promise<{ blob: Blob; url: string; durationSeconds: number }> {
   if (tracks.length === 0) {
     throw new Error('No tracks to render in playlist');
   }
 
-  onProgress?.(5, 'Initializing Web Audio DSP Mixer...');
+  onProgress?.(2, 'Decoding uploaded audio files & preparing DSP Mixer...');
 
-  // Configuration for preview mix generation
-  // Each track plays for trackDuration, with transitionOverlap overlapping crossfade
-  const trackDuration = 20; // 20 seconds per track in continuous mix
-  const overlapDuration = 6; // 6 seconds harmonic crossfade transition
+  // Step 1: Decode all uploaded track audio buffers if needed
+  const decodedBuffers: (AudioBuffer | null)[] = [];
+  for (let i = 0; i < tracks.length; i++) {
+    const track = tracks[i];
+    onProgress?.(
+      2 + Math.floor((i / tracks.length) * 15),
+      `Preparing Track ${i + 1}/${tracks.length}: "${track.title}"`
+    );
+    const buffer = await ensureTrackAudioBuffer(track, (msg) => {
+      onProgress?.(2 + Math.floor((i / tracks.length) * 15), msg);
+    });
+    decodedBuffers.push(buffer);
+  }
+
+  onProgress?.(18, 'Calculating harmonic alignment & crossfade timelines...');
+
+  // Step 2: Determine durations & transition overlap times
+  const trackDurations: number[] = [];
+  const overlaps: number[] = [];
+
+  for (let i = 0; i < tracks.length; i++) {
+    const buf = decodedBuffers[i];
+    const track = tracks[i];
+    let duration = buf ? buf.duration : track.durationSeconds || 300;
+
+    if (mixMode === 'SHORT_EDIT') {
+      duration = Math.min(120, duration);
+    } else if (mixMode === 'MINI_TEASER') {
+      duration = Math.min(35, duration);
+    }
+
+    trackDurations.push(duration);
+
+    // Calculate crossfade overlap: 16 seconds or ~10-15% of track duration
+    const overlap = i < tracks.length - 1 ? Math.min(16, Math.max(6, duration * 0.12)) : 0;
+    overlaps.push(overlap);
+  }
+
+  // Calculate start times for each track
+  const startTimes: number[] = [0];
+  for (let i = 1; i < tracks.length; i++) {
+    const prevStart = startTimes[i - 1];
+    const prevDur = trackDurations[i - 1];
+    const prevOverlap = overlaps[i - 1];
+    startTimes.push(prevStart + prevDur - prevOverlap);
+  }
 
   const totalDurationSeconds =
-    tracks.length * trackDuration - (tracks.length - 1) * overlapDuration;
+    startTimes[tracks.length - 1] + trackDurations[tracks.length - 1];
 
   const sampleRate = 44100;
   const totalSamples = Math.ceil(totalDurationSeconds * sampleRate);
@@ -145,93 +195,111 @@ export async function renderContinuousSetAudio(
 
   // Master Gain & Limiter
   const masterGain = offlineCtx.createGain();
-  masterGain.gain.setValueAtTime(0.85, 0);
+  masterGain.gain.setValueAtTime(0.88, 0);
 
   const compressor = offlineCtx.createDynamicsCompressor();
-  compressor.threshold.setValueAtTime(-1.0, 0);
-  compressor.knee.setValueAtTime(10, 0);
-  compressor.ratio.setValueAtTime(8, 0);
+  compressor.threshold.setValueAtTime(-1.2, 0);
+  compressor.knee.setValueAtTime(8, 0);
+  compressor.ratio.setValueAtTime(6, 0);
   compressor.attack.setValueAtTime(0.003, 0);
-  compressor.release.setValueAtTime(0.1, 0);
+  compressor.release.setValueAtTime(0.12, 0);
 
   masterGain.connect(compressor);
   compressor.connect(offlineCtx.destination);
 
-  // Process each track and schedule nodes
+  // Step 3: Process each track and schedule audio nodes
   for (let i = 0; i < tracks.length; i++) {
     const track = tracks[i];
-    const startTime = i * (trackDuration - overlapDuration);
-    const endTime = startTime + trackDuration;
+    const audioBuf = decodedBuffers[i];
+    const startTime = startTimes[i];
+    const playDuration = trackDurations[i];
+    const overlapIn = i > 0 ? overlaps[i - 1] : 0;
+    const overlapOut = overlaps[i];
+    const endTime = startTime + playDuration;
 
     onProgress?.(
-      10 + Math.floor((i / tracks.length) * 60),
-      `Synthesizing & Aligning Track ${i + 1}/${tracks.length}: "${track.title}" (${track.key.code}, ${track.bpm} BPM)...`
+      20 + Math.floor((i / tracks.length) * 55),
+      `Mixing Track ${i + 1}/${tracks.length}: "${track.title}" (${track.key.code}, ${track.bpm} BPM)...`
     );
 
     const trackGain = offlineCtx.createGain();
 
     // Volume Envelope for seamless crossfading
-    // 1. Fade-in during overlap (except first track)
+    // 1. Fade-in during overlap from previous track
     if (i === 0) {
       trackGain.gain.setValueAtTime(1.0, startTime);
     } else {
-      trackGain.gain.setValueAtTime(0.001, startTime);
-      trackGain.gain.exponentialRampToValueAtTime(1.0, startTime + overlapDuration);
+      trackGain.gain.setValueAtTime(0.0001, startTime);
+      trackGain.gain.exponentialRampToValueAtTime(1.0, startTime + overlapIn);
     }
 
-    // 2. Main playback body
-    const fadeOutStart = endTime - overlapDuration;
-    if (i < tracks.length - 1) {
+    // 2. Main playback body and fade-out into next track
+    const fadeOutStart = endTime - overlapOut;
+    if (i < tracks.length - 1 && overlapOut > 0) {
       trackGain.gain.setValueAtTime(1.0, fadeOutStart);
-      trackGain.gain.exponentialRampToValueAtTime(0.001, endTime);
+      trackGain.gain.exponentialRampToValueAtTime(0.0001, endTime);
     } else {
-      // Last track fades out at the very end
-      trackGain.gain.setValueAtTime(1.0, endTime - 2);
-      trackGain.gain.linearRampToValueAtTime(0.0, endTime);
+      // Final track fade out at end
+      trackGain.gain.setValueAtTime(1.0, Math.max(startTime, endTime - 3));
+      trackGain.gain.linearRampToValueAtTime(0.0001, endTime);
     }
 
+    // Highpass Filter for sub-bass swap during fade in
+    const filter = offlineCtx.createBiquadFilter();
+    filter.type = 'highpass';
+
+    if (i > 0 && overlapIn > 0) {
+      // Start with low frequencies cut, then bring sub-bass in smoothly
+      filter.frequency.setValueAtTime(250, startTime);
+      filter.frequency.exponentialRampToValueAtTime(20, startTime + overlapIn * 0.8);
+    } else {
+      filter.frequency.setValueAtTime(20, startTime);
+    }
+
+    filter.connect(trackGain);
     trackGain.connect(masterGain);
 
-    // If track has decoded PCM buffer from local file upload, use it!
-    if (track.audioBuffer) {
+    if (audioBuf) {
+      // Real uploaded audio track!
       const src = offlineCtx.createBufferSource();
-      src.buffer = track.audioBuffer;
+      src.buffer = audioBuf;
 
-      // Calculate playback rate for BPM matching to previous track if needed
+      // Pitch-bend / tempo adjustment to align with set BPM if applicable
       if (i > 0) {
         const prevTrack = tracks[i - 1];
-        const bpmRatio = prevTrack.bpm / track.bpm;
-        if (Math.abs(bpmRatio - 1) < 0.1) {
-          src.playbackRate.setValueAtTime(bpmRatio, startTime);
+        if (prevTrack.bpm && track.bpm) {
+          const bpmRatio = prevTrack.bpm / track.bpm;
+          if (Math.abs(bpmRatio - 1) <= 0.08) {
+            src.playbackRate.setValueAtTime(bpmRatio, startTime);
+          }
         }
       }
 
-      src.connect(trackGain);
-      src.start(startTime, 0, trackDuration);
+      src.connect(filter);
+      src.start(startTime, 0, playDuration);
     } else {
-      // Synthetic Studio Generation (Rich Electronic Beat + Harmonic Bassline + Chords)
+      // Fallback synthetic studio sound for demo metadata tracks without raw audio files
       generateSyntheticTrackAudio(
         offlineCtx,
-        trackGain,
+        filter,
         track,
         startTime,
-        trackDuration,
+        playDuration,
         sampleRate
       );
     }
   }
 
-  onProgress?.(75, 'Rendering Master Harmonic Audio Buffer via DSP DSP...');
+  onProgress?.(80, 'Rendering master continuous set audio buffer via Web Audio DSP...');
 
-  // Start offline audio rendering
   const renderedBuffer = await offlineCtx.startRendering();
 
-  onProgress?.(90, 'Encoding Master 16-bit PCM WAV File...');
+  onProgress?.(92, 'Encoding master 16-bit PCM WAV File...');
 
   const wavBlob = audioBufferToWav(renderedBuffer);
   const audioUrl = URL.createObjectURL(wavBlob);
 
-  onProgress?.(100, 'Set Transitions Rendered Successfully!');
+  onProgress?.(100, 'Set Mix Rendered Successfully!');
 
   return {
     blob: wavBlob,
@@ -245,7 +313,7 @@ export async function renderContinuousSetAudio(
  */
 function generateSyntheticTrackAudio(
   ctx: OfflineAudioContext,
-  outputGain: GainNode,
+  outputGain: AudioNode,
   track: Track,
   startTime: number,
   duration: number,
@@ -255,13 +323,12 @@ function generateSyntheticTrackAudio(
   const beatInterval = 60 / bpm;
   const totalBeats = Math.floor(duration / beatInterval);
 
-  const rootFreq = camelotToFrequency(track.key.number, track.key.letter === 'A');
+  const rootFreq = camelotToFrequency(track.key?.number || 8, track.key?.letter === 'A');
 
   // 1. Four-on-the-floor Kick Drum
   for (let b = 0; b < totalBeats; b++) {
     const beatTime = startTime + b * beatInterval;
 
-    // Kick Oscillator
     const kickOsc = ctx.createOscillator();
     const kickGain = ctx.createGain();
 
@@ -278,7 +345,7 @@ function generateSyntheticTrackAudio(
     kickOsc.start(beatTime);
     kickOsc.stop(beatTime + 0.15);
 
-    // 2. Off-beat Hi-Hat (on beats 0.5, 1.5, 2.5, etc.)
+    // 2. Off-beat Hi-Hat
     const hatTime = beatTime + beatInterval * 0.5;
     const hatBuffer = createNoiseBuffer(ctx, 0.05, sampleRate);
     const hatSrc = ctx.createBufferSource();
@@ -309,7 +376,7 @@ function generateSyntheticTrackAudio(
   bassOsc.frequency.setValueAtTime(rootFreq, startTime);
 
   bassFilter.type = 'lowpass';
-  bassFilter.frequency.setValueAtTime(220 + track.des * 40, startTime);
+  bassFilter.frequency.setValueAtTime(220 + (track.des || 5) * 40, startTime);
 
   const bassVol = 0.2 + (track.spectral?.subBassWeight || 5) * 0.03;
   bassGain.gain.setValueAtTime(bassVol, startTime);
@@ -321,12 +388,11 @@ function generateSyntheticTrackAudio(
   bassOsc.start(startTime);
   bassOsc.stop(startTime + duration);
 
-  // 4. Atmospheric Harmonic Chords / Lead Synth
+  // 4. Atmospheric Lead Synth
   const chordOsc = ctx.createOscillator();
   const chordGain = ctx.createGain();
 
   chordOsc.type = 'triangle';
-  // Perfect 5th harmonic above root
   chordOsc.frequency.setValueAtTime(rootFreq * 1.5, startTime);
 
   chordGain.gain.setValueAtTime(0.08, startTime);

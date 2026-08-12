@@ -12,20 +12,30 @@ import { CreateTransitionsModal } from './components/CreateTransitionsModal';
 import { ExportModal } from './components/ExportModal';
 
 import { BlueprintType, Crate, SortingParameters, Track } from './types';
-import { DEMO_CRATES } from './data/demoCrates';
 import { sortPlaylist, BLUEPRINTS } from './lib/sortingAlgorithm';
 
+const INITIAL_CRATES: Crate[] = [
+  {
+    id: 'crate-main',
+    name: 'My Mix Set',
+    description: 'Upload local audio files to auto-sort and render your set mix',
+    blueprint: 'PEAK_MOUNTAIN',
+    createdAt: new Date().toISOString(),
+    tracks: [],
+  },
+];
+
 export default function App() {
-  const [crates, setCrates] = useState<Crate[]>(DEMO_CRATES);
-  const [activeCrateId, setActiveCrateId] = useState<string>(DEMO_CRATES[0].id);
+  const [crates, setCrates] = useState<Crate[]>(INITIAL_CRATES);
+  const [activeCrateId, setActiveCrateId] = useState<string>(INITIAL_CRATES[0].id);
 
   // Active tracks in the current workspace
   const activeCrate = useMemo(() => {
-    return crates.find((c) => c.id === activeCrateId) || crates[0];
+    return crates.find((c) => c.id === activeCrateId) || crates[0] || INITIAL_CRATES[0];
   }, [crates, activeCrateId]);
 
-  const [tracks, setTracks] = useState<Track[]>(activeCrate.tracks);
-  const [selectedBlueprint, setSelectedBlueprint] = useState<BlueprintType>(activeCrate.blueprint);
+  const [tracks, setTracks] = useState<Track[]>(activeCrate?.tracks || []);
+  const [selectedBlueprint, setSelectedBlueprint] = useState<BlueprintType>(activeCrate?.blueprint || 'PEAK_MOUNTAIN');
 
   const [customCurve, setCustomCurve] = useState<number[]>([4, 5, 6, 7, 8, 9, 8, 7, 6, 5]);
 

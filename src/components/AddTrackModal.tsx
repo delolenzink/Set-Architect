@@ -14,7 +14,6 @@ import {
 import { Track } from '../types';
 import { parseCamelotKey } from '../lib/camelot';
 import { analyzeAudioFile } from '../lib/audioAnalyzer';
-import { DEMO_CRATES } from '../data/demoCrates';
 import { parseRekordboxXml } from '../lib/exporters';
 
 interface AddTrackModalProps {
@@ -49,7 +48,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
   onAddTracks,
   onRunSortAfterAdd,
 }) => {
-  const [activeTab, setActiveTab] = useState<'MANUAL' | 'FILES' | 'XML' | 'DEMO'>('MANUAL');
+  const [activeTab, setActiveTab] = useState<'FILES' | 'MANUAL' | 'XML'>('FILES');
 
   // Manual Form State
   const [title, setTitle] = useState('');
@@ -139,6 +138,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
         waveformPeaks: analysis.waveformPeaks || [],
         fileName: file.name,
         fileObject: file,
+        audioBuffer: analysis.audioBuffer,
       });
     }
 
@@ -211,17 +211,6 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
         {/* Navigation Tabs */}
         <div className="flex border-b border-[#2a2a2e] my-4 text-xs font-mono">
           <button
-            onClick={() => setActiveTab('MANUAL')}
-            className={`flex-1 py-2.5 border-b-2 text-center font-bold transition flex items-center justify-center gap-1.5 ${
-              activeTab === 'MANUAL'
-                ? 'border-[#ff4e00] text-[#ff4e00] bg-[#ff4e00]/10'
-                : 'border-transparent text-[#888] hover:text-white'
-            }`}
-          >
-            <Plus className="w-3.5 h-3.5" /> Quick Input
-          </button>
-
-          <button
             onClick={() => setActiveTab('FILES')}
             className={`flex-1 py-2.5 border-b-2 text-center font-bold transition flex items-center justify-center gap-1.5 ${
               activeTab === 'FILES'
@@ -229,7 +218,7 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
                 : 'border-transparent text-[#888] hover:text-white'
             }`}
           >
-            <Upload className="w-3.5 h-3.5" /> Audio File
+            <Upload className="w-3.5 h-3.5" /> Upload Audio Files
           </button>
 
           <button
@@ -244,14 +233,14 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
           </button>
 
           <button
-            onClick={() => setActiveTab('DEMO')}
+            onClick={() => setActiveTab('MANUAL')}
             className={`flex-1 py-2.5 border-b-2 text-center font-bold transition flex items-center justify-center gap-1.5 ${
-              activeTab === 'DEMO'
+              activeTab === 'MANUAL'
                 ? 'border-[#ff4e00] text-[#ff4e00] bg-[#ff4e00]/10'
                 : 'border-transparent text-[#888] hover:text-white'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5" /> Demo Crates
+            <Plus className="w-3.5 h-3.5" /> Manual Track
           </button>
         </div>
 
@@ -451,38 +440,6 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
                   </p>
                 </div>
               </label>
-            </div>
-          )}
-
-          {activeTab === 'DEMO' && (
-            <div className="space-y-2">
-              {DEMO_CRATES.map((crate) => (
-                <div
-                  key={crate.id}
-                  onClick={() => {
-                    onAddTracks(crate.tracks, crate.name);
-                    if (onRunSortAfterAdd) {
-                      setTimeout(() => onRunSortAfterAdd(), 100);
-                    }
-                    onClose();
-                  }}
-                  className="p-3.5 rounded-sm bg-[#121214] border border-[#2a2a2e] hover:border-[#ff4e00] cursor-pointer transition-all flex items-center justify-between group"
-                >
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="text-sm font-bold text-white group-hover:text-[#ff4e00] transition-colors font-sans">
-                        {crate.name}
-                      </h4>
-                      <span className="px-2 py-0.5 rounded-sm text-[10px] font-mono bg-[#ff4e00]/10 text-[#ff4e00] border border-[#ff4e00]/30">
-                        {crate.tracks.length} Tracks
-                      </span>
-                    </div>
-                    <p className="text-xs text-[#888]">{crate.description}</p>
-                  </div>
-
-                  <Sparkles className="w-4 h-4 text-[#666] group-hover:text-[#ff4e00] transition-colors shrink-0" />
-                </div>
-              ))}
             </div>
           )}
 
