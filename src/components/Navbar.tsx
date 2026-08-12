@@ -10,6 +10,7 @@ import {
   Zap,
   Wand2,
   Bot,
+  RefreshCw,
 } from 'lucide-react';
 import { Crate } from '../types';
 import { Logo } from './Logo';
@@ -60,6 +61,27 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className="px-2 py-0.5 text-[10px] font-mono font-semibold tracking-wider text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 rounded-full">
                 v1.0 EXEC
               </span>
+              <button
+                onClick={() => {
+                  try {
+                    localStorage.clear();
+                    sessionStorage.clear();
+                    if (typeof caches !== 'undefined') {
+                      caches.keys().then((keys) => Promise.all(keys.map((k) => caches.delete(k)))).finally(() => {
+                        window.location.reload();
+                      });
+                    } else {
+                      window.location.reload();
+                    }
+                  } catch {
+                    window.location.reload();
+                  }
+                }}
+                className="p-1 text-slate-400 hover:text-cyan-400 transition"
+                title="Sync Live App (Purge Stale Cache)"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+              </button>
             </div>
             <p className="text-xs text-slate-400 hidden sm:block">
               Executive Harmonic & Dynamic Playlist Auto-Sorter
