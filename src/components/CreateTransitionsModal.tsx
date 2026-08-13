@@ -14,6 +14,7 @@ import {
   Sliders,
   Volume2,
   Wand2,
+  ArrowLeft,
 } from 'lucide-react';
 import { Track, TransitionAnalysis } from '../types';
 import { renderContinuousSetAudio, MixMode } from '../lib/setAudioRenderer';
@@ -142,7 +143,17 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
 
             <button
               onClick={onClose}
+              className="px-3 py-1.5 text-xs font-mono font-bold bg-[#1a1a20] hover:bg-[#25252e] text-cyan-400 hover:text-cyan-300 border border-[#2a2a35] rounded-sm transition flex items-center gap-1.5"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>← BACK TO STUDIO</span>
+            </button>
+
+            <button
+              onClick={onClose}
               className="p-1.5 rounded-sm bg-[#1a1a20] hover:bg-[#25252e] text-[#888] hover:text-white transition-colors"
+              title="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -170,10 +181,10 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
             </div>
 
             <div className="p-3 bg-[#131318] border border-[#23232c] rounded-sm">
-              <span className="text-[10px] text-[#777] uppercase block">CROSSFADE ZONE</span>
+              <span className="text-[10px] text-[#777] uppercase block">MANDATORY OVERLAP</span>
               <span className="text-sm font-bold text-[#ff4e00] flex items-center gap-1.5 mt-0.5">
                 <Sliders className="w-3.5 h-3.5" />
-                16-Bar EQ
+                ≥ 5.0s Enforced
               </span>
             </div>
 
@@ -379,9 +390,14 @@ export const CreateTransitionsModal: React.FC<CreateTransitionsModalProps> = ({
                       <span className="text-cyan-400 font-bold">{track.key.code}</span>
                       <span className="text-amber-400">{track.bpm} BPM</span>
                       {trans && (
-                        <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#ff4e00]/10 border border-[#ff4e00]/30 text-[#ff4e00]">
-                          {trans.type.replace('_', ' ')}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-[#ff4e00]/10 border border-[#ff4e00]/30 text-[#ff4e00]">
+                            {trans.type.replace('_', ' ')}
+                          </span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] bg-cyan-950 text-cyan-400 border border-cyan-800">
+                            {trans.overlapDurationSec || 5.0}s OVERLAP
+                          </span>
+                        </div>
                       )}
                     </div>
                   </div>

@@ -7,6 +7,7 @@ import {
   Sparkles,
   Lock,
   Crown,
+  ArrowLeft,
 } from 'lucide-react';
 import { Track } from '../types';
 import { parseRekordboxXml } from '../lib/exporters';
@@ -137,12 +138,24 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition border border-slate-700 shadow-md mr-1"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>← Back to Studio</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}

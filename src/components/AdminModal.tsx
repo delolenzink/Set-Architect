@@ -20,6 +20,8 @@ import {
   Building2,
   CreditCard,
   CheckCheck,
+  Crown,
+  ArrowLeft,
 } from 'lucide-react';
 import { DJRegistration } from '../types';
 import {
@@ -33,7 +35,7 @@ import {
   updateManualPaymentStatus,
   deleteManualPayment,
 } from '../lib/manualPaymentsStore';
-import { setUserSubscriptionTier } from '../lib/rbac';
+import { setUserSubscriptionTier, setAdminAuthenticated } from '../lib/rbac';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -83,7 +85,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     e.preventDefault();
     setLoginError('');
 
-    if (usernameInput.trim() === 'admin' && passwordInput === 'MouseNapolean2025#') {
+    const usernameClean = usernameInput.trim().toLowerCase();
+    const passwordClean = passwordInput.trim();
+
+    if (usernameClean === 'admin' && passwordClean === 'MouseNapolean2025#') {
+      setAdminAuthenticated(true);
       onAdminLogin(true);
       setRegistrations(getDJRegistrations());
       setManualPaymentsList(getManualPayments());
@@ -202,12 +208,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               </p>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition border border-slate-700 shadow-md mr-1"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>← Back to Studio</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg text-slate-400 hover:text-slate-200 hover:bg-slate-800 transition"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {!isAdminAuthenticated ? (
@@ -272,6 +289,17 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         ) : (
           /* Authenticated Admin Panel */
           <div className="p-6 overflow-y-auto space-y-6 flex-1">
+            {/* Full Access Admin Mode Banner */}
+            <div className="p-3 bg-gradient-to-r from-amber-950/80 via-amber-900/40 to-slate-900 border border-amber-500/50 rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-300 font-mono text-xs shadow-lg">
+              <div className="flex items-center gap-2">
+                <Crown className="w-4 h-4 text-amber-400 shrink-0" />
+                <span><strong>FULL APP ACCESS UNLOCKED:</strong> All Executive Tier tools, AI Mixer, unlimited sets & library exports are active.</span>
+              </div>
+              <span className="px-2.5 py-1 bg-amber-500 text-black font-bold text-[10px] rounded-lg tracking-wider shrink-0">
+                ADMIN MODE ACTIVE
+              </span>
+            </div>
+
             {/* Quick Stats Grid */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="p-3.5 rounded-xl bg-slate-950 border border-slate-800">
@@ -379,7 +407,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </button>
 
                 <button
-                  onClick={onAdminLogout}
+                  onClick={() => {
+                    setAdminAuthenticated(false);
+                    onAdminLogout();
+                  }}
                   className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono bg-red-950/60 hover:bg-red-900/80 text-red-300 rounded-xl transition border border-red-800/60"
                   title="Log out of Admin Panel"
                 >

@@ -8,6 +8,7 @@ import {
   ShieldAlert,
   Sparkles,
   ArrowRight,
+  ArrowLeft,
   ShieldCheck,
   Bot,
   Cloud,
@@ -116,13 +117,25 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
         {/* Top Decorative Gradient */}
         <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-slate-700 via-cyan-500 to-amber-500" />
 
-        {/* Header Close */}
-        <button
-          onClick={onClose}
-          className="absolute top-5 right-5 p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition"
-        >
-          <X className="w-5 h-5" />
-        </button>
+        {/* Back and Close Bar */}
+        <div className="flex items-center justify-between mb-4">
+          <button
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition border border-slate-700 shadow-md"
+            title="Return to Main Set Studio"
+          >
+            <ArrowLeft className="w-4 h-4" />
+            <span>← Back to Studio</span>
+          </button>
+
+          <button
+            onClick={onClose}
+            className="p-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-400 hover:text-slate-100 transition"
+            title="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
 
         {/* Notification Banner when opened via feature guard */}
         {featureDef && (
@@ -210,7 +223,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
               >
                 <span>Annual</span>
                 <span className="px-1 py-0.2 text-[8px] bg-black/40 text-amber-300 rounded">
-                  25% OFF
+                  ANNUAL DISCOUNT
                 </span>
               </button>
             </div>
@@ -379,7 +392,7 @@ export const UpgradeModal: React.FC<UpgradeModalProps> = ({
 
                 <div className="my-4">
                   <span className="text-3xl font-extrabold font-mono text-white">
-                    {billingCycle === 'MONTHLY' ? 'R349' : 'R3,199'}
+                    {billingCycle === 'MONTHLY' ? 'R349' : 'R3,500'}
                   </span>
                   <span className="text-xs text-slate-400 font-mono ml-1">
                     {billingCycle === 'MONTHLY' ? '/ month' : '/ year'}

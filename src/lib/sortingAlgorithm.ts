@@ -186,6 +186,16 @@ export function analyzePairTransition(fromTrack: Track, toTrack: Track): Transit
   const pitchBendPercent = Number((((toTrack.bpm - fromTrack.bpm) / fromTrack.bpm) * 100).toFixed(1));
   const energyDelta = Number((toTrack.des - fromTrack.des).toFixed(1));
 
+  // Enforce mandatory minimum 5-second overlap for all transitions
+  const baseBpm = Math.max(60, fromTrack.bpm);
+  const beatSec = 60 / baseBpm;
+  const phraseOverlapSec = 16 * beatSec;
+  const overlapDurationSec = Number(Math.max(5.0, phraseOverlapSec).toFixed(1));
+
+  const fromTrackDuration = fromTrack.durationSeconds || 180;
+  const crossfadeEndSec = Number(fromTrackDuration.toFixed(1));
+  const crossfadeStartSec = Number(Math.max(0, fromTrackDuration - overlapDurationSec).toFixed(1));
+
   // Frequency overlap evaluation
   const bothSubBass = fromTrack.spectral.subBassWeight > 7.2 && toTrack.spectral.subBassWeight > 7.2;
   const bothMidRange = fromTrack.spectral.midRangeDensity > 7.5 && toTrack.spectral.midRangeDensity > 7.5;
@@ -202,11 +212,13 @@ export function analyzePairTransition(fromTrack: Track, toTrack: Track): Transit
     ).toFixed(1)
   );
 
-  let suggestedMixZone = `Mix Outro (${fromTrack.cuePoints.find((c) => c.type === 'OUTRO')?.name || '32 Beats'}) with Intro (${toTrack.cuePoints.find((c) => c.type === 'INTRO')?.name || '32 Beats'})`;
+  let suggestedMixZone = `Mandatory 5s Crossfade (${overlapDurationSec}s Overlap: Marker ${crossfadeStartSec}s ➔ ${crossfadeEndSec}s)`;
   let techniqueNote = transitionInfo.note;
 
+  techniqueNote += ` ⏱️ Mandatory 5-second crossfade overlap enforced (${overlapDurationSec}s active blend window from ${crossfadeStartSec}s to ${crossfadeEndSec}s).`;
+
   if (subBassClashRisk === 'HIGH') {
-    techniqueNote += ` ⚠️ Sub-bass overlap detected (${fromTrack.spectral.subBassWeight} vs ${toTrack.spectral.subBassWeight}). Perform strict hard EQ bass swap on Beat 16 of Breakdown.`;
+    techniqueNote += ` ⚠️ Sub-bass overlap detected (${fromTrack.spectral.subBassWeight} vs ${toTrack.spectral.subBassWeight}). Perform strict hard EQ bass swap at midpoint marker (${(crossfadeStartSec + overlapDurationSec / 2).toFixed(1)}s).`;
   }
   if (Math.abs(pitchBendPercent) > 2.5) {
     techniqueNote += ` 🎚️ Pitch shift: ${toTrack.title} requires ${pitchBendPercent > 0 ? '+' : ''}${pitchBendPercent}% pitch bend to match ${fromTrack.bpm} BPM.`;
@@ -224,5 +236,8 @@ export function analyzePairTransition(fromTrack: Track, toTrack: Track): Transit
     spectralClashScore,
     suggestedMixZone,
     techniqueNote,
+    overlapDurationSec,
+    crossfadeStartSec,
+    crossfadeEndSec,
   };
 }

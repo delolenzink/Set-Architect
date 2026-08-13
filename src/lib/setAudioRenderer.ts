@@ -235,8 +235,9 @@ export async function renderContinuousSetAudio(
   const startTimes: number[] = [0];
 
   for (let i = 0; i < tracks.length - 1; i++) {
-    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 8 : 32;
-    const transitionTimelineSec = phraseBeats * beatSec;
+    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 12 : 32;
+    // Enforce at least 5-second synced mix into the next track for ultra-smooth beat transitions
+    const transitionTimelineSec = Math.max(5.0, phraseBeats * beatSec);
 
     // Outro Cue time of Track i on the master timeline
     const trackI_OutroTimeline = startTimes[i] + (outroCueBuffers[i] / playbackRates[i]);
@@ -284,8 +285,8 @@ export async function renderContinuousSetAudio(
     const introCueBuf = introCueBuffers[i];
     const outroCueBuf = outroCueBuffers[i];
 
-    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 8 : 32;
-    const transitionTimelineSec = phraseBeats * beatSec;
+    const phraseBeats = mixMode === 'SHORT_EDIT' ? 16 : mixMode === 'MINI_TEASER' ? 12 : 32;
+    const transitionTimelineSec = Math.max(5.0, phraseBeats * beatSec);
 
     // Clean mix-out point on master timeline
     const mixOutTimeline = startTime + (outroCueBuf / rate);

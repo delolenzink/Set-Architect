@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import {
+  ArrowLeft,
   Compass,
   Download,
   FolderOpen,
@@ -39,6 +40,9 @@ interface NavbarProps {
   onRunSort: () => void;
   isSorting: boolean;
   trackCount: number;
+  hasActiveModal?: boolean;
+  activeModalTitle?: string | null;
+  onBackToStudio?: () => void;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -60,6 +64,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   onRunSort,
   isSorting,
   trackCount,
+  hasActiveModal,
+  activeModalTitle,
+  onBackToStudio,
 }) => {
   const [userTier, setUserTier] = useState<SubscriptionTier>(getUserSubscriptionTier());
 
@@ -78,6 +85,24 @@ export const Navbar: React.FC<NavbarProps> = ({
   return (
     <header id="app-header" className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3 transition-all">
       <div className="max-w-7xl mx-auto flex flex-col gap-3 w-full">
+        {/* Active View Back Navigation Banner */}
+        {hasActiveModal && onBackToStudio && (
+          <div className="flex items-center justify-between p-2.5 bg-gradient-to-r from-cyan-950/90 via-slate-900 to-slate-950 border border-cyan-500/50 rounded-xl shadow-lg font-mono text-xs text-cyan-300">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping" />
+              <span>ACTIVE VIEW: <strong>{activeModalTitle || 'Modal View'}</strong></span>
+            </div>
+            <button
+              onClick={onBackToStudio}
+              className="flex items-center gap-1.5 px-3 py-1 bg-cyan-500 hover:bg-cyan-400 text-slate-950 font-extrabold rounded-lg transition shadow-md shadow-cyan-500/20"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>← BACK TO MAIN STUDIO</span>
+            </button>
+          </div>
+        )}
+
         {/* ROW 1: Branding, Subscription Badge, Crate Selector & Primary File Actions */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-3 w-full">
           {/* Branding Block */}
@@ -110,7 +135,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     ) : (
                       <Lock className="w-3 h-3 text-slate-500" />
                     )}
-                    <span>{tierDetail.badgeLabel}</span>
+                    <span>{isAdminLoggedIn ? 'Tier 3 • Executive (Admin)' : tierDetail.badgeLabel}</span>
                   </button>
 
                   <button

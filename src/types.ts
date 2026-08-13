@@ -86,6 +86,9 @@ export interface TransitionAnalysis {
   spectralClashScore: number; // 0-10 score of frequency collision
   suggestedMixZone: string; // e.g. "Mix Outro A (Beat 64) with Intro B (Beat 1)"
   techniqueNote: string; // Detailed advice for DJ
+  overlapDurationSec?: number; // Mandatory >= 5.0s crossfade overlap duration
+  crossfadeStartSec?: number; // Crossfade start marker position in Track A (seconds)
+  crossfadeEndSec?: number; // Crossfade end marker position in Track A (seconds)
 }
 
 export interface Crate {

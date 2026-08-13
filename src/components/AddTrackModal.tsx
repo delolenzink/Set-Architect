@@ -10,6 +10,7 @@ import {
   Check,
   Sliders,
   Layers,
+  ArrowLeft,
 } from 'lucide-react';
 import { Track } from '../types';
 import { parseCamelotKey } from '../lib/camelot';
@@ -200,12 +201,24 @@ export const AddTrackModal: React.FC<AddTrackModalProps> = ({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-sm bg-[#1e1e22] hover:bg-[#2a2a2e] text-[#888] hover:text-white transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-sm bg-[#1e1e22] hover:bg-[#2a2a2e] text-cyan-400 font-mono text-xs font-bold transition border border-[#3a3a40] shadow-md mr-1"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>← BACK TO STUDIO</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-sm bg-[#1e1e22] hover:bg-[#2a2a2e] text-[#888] hover:text-white transition-colors"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Navigation Tabs */}

@@ -29,7 +29,7 @@ export const CAPITEC_EFT_DETAILS = {
     },
     EXECUTIVE: {
       MONTHLY: 'R349',
-      ANNUAL: 'R3,199',
+      ANNUAL: 'R3,500',
       LIFETIME: 'R2,499',
     },
   },

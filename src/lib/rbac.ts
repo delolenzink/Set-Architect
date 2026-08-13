@@ -90,7 +90,7 @@ export const TIER_DETAILS: Record<SubscriptionTier, TierDetails> = {
     name: 'Executive DJ Studio',
     badgeLabel: 'Tier 3 • Executive',
     monthlyPrice: 'R349 / mo',
-    annualPrice: 'R3,199 / yr',
+    annualPrice: 'R3,500 / yr',
     lifetimePrice: 'R2,499 Lifetime',
     tagline: 'Ultimate studio suite with AI Music Mixer & Cloud Sync',
     maxTracksPerSet: Infinity,
@@ -179,9 +179,37 @@ export const PERMISSION_MATRIX: Record<FeaturePermission, PermissionDefinition> 
 };
 
 const STORAGE_KEY = 'set_architect_user_subscription_tier_v1';
+const ADMIN_STORAGE_KEY = 'set_architect_admin_authenticated_v1';
+
+export function isAdminAuthenticated(): boolean {
+  try {
+    return localStorage.getItem(ADMIN_STORAGE_KEY) === 'true';
+  } catch {
+    return false;
+  }
+}
+
+export function setAdminAuthenticated(isAdmin: boolean): void {
+  try {
+    if (isAdmin) {
+      localStorage.setItem(ADMIN_STORAGE_KEY, 'true');
+      localStorage.setItem(STORAGE_KEY, 'EXECUTIVE');
+    } else {
+      localStorage.removeItem(ADMIN_STORAGE_KEY);
+    }
+    window.dispatchEvent(
+      new CustomEvent('subscription_tier_changed', { detail: { tier: getUserSubscriptionTier() } })
+    );
+  } catch (err) {
+    console.error('Failed to update admin authentication in localStorage:', err);
+  }
+}
 
 export function getUserSubscriptionTier(): SubscriptionTier {
   try {
+    if (isAdminAuthenticated()) {
+      return 'EXECUTIVE';
+    }
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved === 'FREE' || saved === 'PRO' || saved === 'EXECUTIVE') {
       return saved as SubscriptionTier;
@@ -212,6 +240,9 @@ export function hasPermission(
   permission: FeaturePermission,
   userTier?: SubscriptionTier
 ): boolean {
+  if (isAdminAuthenticated()) {
+    return true; // Admin bypass for live presentation & testing
+  }
   const currentTier = userTier || getUserSubscriptionTier();
   const currentLevel = getTierLevel(currentTier);
   const requiredTier = PERMISSION_MATRIX[permission].requiredTier;

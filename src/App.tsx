@@ -24,7 +24,7 @@ import { BlueprintType, Crate, DJRegistration, SortingParameters, Track } from '
 import { sortPlaylist, BLUEPRINTS } from './lib/sortingAlgorithm';
 import { analyzeAudioFile } from './lib/audioAnalyzer';
 import { parseRekordboxXml } from './lib/exporters';
-import { getUserSubscriptionTier, FeaturePermission, checkPermissionGuard, hasPermission } from './lib/rbac';
+import { getUserSubscriptionTier, FeaturePermission, checkPermissionGuard, hasPermission, isAdminAuthenticated as checkIsAdmin, setAdminAuthenticated } from './lib/rbac';
 
 const INITIAL_CRATES: Crate[] = [
   {
@@ -79,7 +79,7 @@ export default function App() {
   const [isAdminOpen, setIsAdminOpen] = useState(false);
 
   const [activeDJ, setActiveDJ] = useState<DJRegistration | null>(null);
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(false);
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState<boolean>(checkIsAdmin());
 
   const [selectedTransitionIdx, setSelectedTransitionIdx] = useState<number | null>(null);
   const [deckATrack, setDeckATrack] = useState<Track | null>(null);
@@ -87,6 +87,62 @@ export default function App() {
 
   const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
   const [upgradeRequiredFeature, setUpgradeRequiredFeature] = useState<FeaturePermission | null>(null);
+
+  // Active modal computing for seamless Back navigation
+  const activeModalTitle = useMemo(() => {
+    if (isAIMixerOpen) return 'AI Music Mixer';
+    if (isCreateTransitionsOpen) return 'Set Audio Renderer';
+    if (isImporterOpen) return 'Audio Importer';
+    if (isExportOpen) return 'Export Set';
+    if (isDualDeckOpen) return 'Dual Deck Player';
+    if (isCamelotOpen) return 'Camelot Wheel';
+    if (isDJRegistrationOpen) return 'DJ Registration';
+    if (isAdminOpen) return 'Admin Studio';
+    if (isUpgradeOpen) return 'Subscription Plans';
+    if (selectedTransitionIdx !== null) return 'Transition Inspector';
+    if (isCreateMashupOpen) return 'Mashup Creator';
+    if (isAddTrackOpen) return 'Add Track';
+    return null;
+  }, [
+    isAIMixerOpen,
+    isCreateTransitionsOpen,
+    isImporterOpen,
+    isExportOpen,
+    isDualDeckOpen,
+    isCamelotOpen,
+    isDJRegistrationOpen,
+    isAdminOpen,
+    isUpgradeOpen,
+    selectedTransitionIdx,
+    isCreateMashupOpen,
+    isAddTrackOpen,
+  ]);
+
+  const handleBackToStudio = useCallback(() => {
+    setIsAIMixerOpen(false);
+    setIsCreateTransitionsOpen(false);
+    setIsImporterOpen(false);
+    setIsExportOpen(false);
+    setIsDualDeckOpen(false);
+    setIsCamelotOpen(false);
+    setIsDJRegistrationOpen(false);
+    setIsAdminOpen(false);
+    setIsUpgradeOpen(false);
+    setSelectedTransitionIdx(null);
+    setIsCreateMashupOpen(false);
+    setIsAddTrackOpen(false);
+  }, []);
+
+  // Keyboard Escape listener for back navigation
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && activeModalTitle) {
+        handleBackToStudio();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [activeModalTitle, handleBackToStudio]);
 
   const handleOpenUpgradeModal = (feature?: FeaturePermission) => {
     setUpgradeRequiredFeature(feature || null);
@@ -404,6 +460,9 @@ export default function App() {
         onRunSort={handleRunSort}
         isSorting={isSorting}
         trackCount={tracks.length}
+        hasActiveModal={!!activeModalTitle}
+        activeModalTitle={activeModalTitle}
+        onBackToStudio={handleBackToStudio}
       />
 
       {/* Main App Container */}
@@ -549,8 +608,14 @@ export default function App() {
         isOpen={isAdminOpen}
         onClose={() => setIsAdminOpen(false)}
         isAdminAuthenticated={isAdminAuthenticated}
-        onAdminLogin={(success) => setIsAdminAuthenticated(success)}
-        onAdminLogout={() => setIsAdminAuthenticated(false)}
+        onAdminLogin={(success) => {
+          setIsAdminAuthenticated(success);
+          setAdminAuthenticated(success);
+        }}
+        onAdminLogout={() => {
+          setIsAdminAuthenticated(false);
+          setAdminAuthenticated(false);
+        }}
         trackCount={tracks.length}
         crateCount={crates.length}
       />

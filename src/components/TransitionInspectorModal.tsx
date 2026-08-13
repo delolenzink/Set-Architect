@@ -7,6 +7,7 @@ import {
   Zap,
   Activity,
   ArrowRight,
+  ArrowLeft,
   Sparkles,
 } from 'lucide-react';
 import { Track, TransitionAnalysis } from '../types';
@@ -57,12 +58,24 @@ export const TransitionInspectorModal: React.FC<TransitionInspectorModalProps> =
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition border border-slate-700 shadow-md mr-1"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>← Back to Studio</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+              title="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Content Body */}
@@ -176,6 +189,120 @@ export const TransitionInspectorModal: React.FC<TransitionInspectorModalProps> =
               </div>
             </div>
           </div>
+
+          {/* Visual Crossfade Overlap Timeline & Markers */}
+          {(() => {
+            const baseBpm = Math.max(60, fromTrack.bpm);
+            const beatSec = 60 / baseBpm;
+            const calculatedOverlap = 16 * beatSec;
+            const overlapDurationSec = transition.overlapDurationSec || Number(Math.max(5.0, calculatedOverlap).toFixed(1));
+            const fromDuration = fromTrack.durationSeconds || 180;
+            const crossfadeStartSec = transition.crossfadeStartSec || Number(Math.max(0, fromDuration - overlapDurationSec).toFixed(1));
+            const crossfadeEndSec = transition.crossfadeEndSec || Number(fromDuration.toFixed(1));
+
+            return (
+              <div className="p-4 rounded-xl bg-slate-950/90 border border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <span className="text-xs font-bold font-mono text-cyan-400 uppercase tracking-wider flex items-center gap-1.5">
+                    <Sliders className="w-4 h-4 text-cyan-400" />
+                    CROSSFADE OVERLAP TIMELINE & VISUAL MARKERS
+                  </span>
+
+                  <span className="px-2.5 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-950 text-cyan-300 border border-cyan-700/60 self-start sm:self-auto">
+                    ⏱️ {overlapDurationSec}s MANDATORY OVERLAP (MIN 5.0S ENFORCED)
+                  </span>
+                </div>
+
+                {/* Waveform Crossfade Envelope Stage */}
+                <div className="p-4 bg-slate-900/80 border border-slate-800 rounded-xl space-y-3 relative font-mono text-xs overflow-hidden">
+                  {/* Outgoing Track A Waveform / Envelope Lane */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-[11px] text-slate-400 font-bold">
+                      <span className="text-cyan-400 flex items-center gap-1">
+                        <span>TRACK A (OUTGOING):</span>
+                        <span className="text-slate-300 font-normal truncate max-w-[160px] sm:max-w-[240px]">{fromTrack.title}</span>
+                      </span>
+                      <span className="text-cyan-400 font-mono">Outro Fading Out</span>
+                    </div>
+
+                    <div className="relative h-9 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden flex items-center px-2">
+                      <div className="absolute left-0 top-0 bottom-0 bg-cyan-950/40 border-r border-cyan-800/50" style={{ width: '60%' }}>
+                        <div className="h-full w-full opacity-30 bg-[radial-gradient(#06b6d4_1px,transparent_1px)] [background-size:8px_8px]" />
+                      </div>
+
+                      <div className="absolute left-[60%] right-0 top-0 bottom-0 bg-gradient-to-r from-cyan-500/30 to-transparent border-l-2 border-dashed border-cyan-400 flex items-center justify-center">
+                        <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                          <path d="M 0,10 Q 50,20 100,90 L 100,100 L 0,100 Z" fill="rgba(6,182,212,0.25)" />
+                          <path d="M 0,10 Q 50,20 100,90" fill="none" stroke="#22d3ee" strokeWidth="3" strokeDasharray="4 2" />
+                        </svg>
+                      </div>
+
+                      <span className="relative z-10 text-[10px] text-cyan-300 font-bold">Body (100% Volume)</span>
+                    </div>
+                  </div>
+
+                  {/* Incoming Track B Waveform / Envelope Lane */}
+                  <div className="space-y-1 pt-1">
+                    <div className="flex justify-between text-[11px] text-slate-400 font-bold">
+                      <span className="text-violet-400 flex items-center gap-1">
+                        <span>TRACK B (INCOMING):</span>
+                        <span className="text-slate-300 font-normal truncate max-w-[160px] sm:max-w-[240px]">{toTrack.title}</span>
+                      </span>
+                      <span className="text-violet-400 font-mono">Intro Fading In</span>
+                    </div>
+
+                    <div className="relative h-9 bg-slate-950 rounded-lg border border-slate-800 overflow-hidden flex items-center px-2">
+                      <div className="absolute left-0 top-0 bottom-0 bg-slate-950 border-r border-slate-800/80" style={{ width: '60%' }}>
+                        <span className="absolute inset-0 flex items-center justify-center text-[10px] text-slate-600 italic">Cue Standby</span>
+                      </div>
+
+                      <div className="absolute left-[60%] right-0 top-0 bottom-0 bg-gradient-to-r from-transparent to-violet-500/30 border-l-2 border-dashed border-cyan-400">
+                        <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
+                          <path d="M 0,90 Q 50,80 100,10 L 100,100 L 0,100 Z" fill="rgba(139,92,246,0.25)" />
+                          <path d="M 0,90 Q 50,80 100,10" fill="none" stroke="#a78bfa" strokeWidth="3" />
+                        </svg>
+                      </div>
+
+                      <span className="relative z-10 text-[10px] text-violet-300 font-bold ml-[65%]">Intro Crossfade In</span>
+                    </div>
+                  </div>
+
+                  {/* VISUAL MARKERS OVERLAY LAYER */}
+                  <div className="pt-2 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-2 text-center text-[11px] font-mono">
+                    {/* Start Marker */}
+                    <div className="p-2 bg-cyan-950/60 border border-cyan-700/60 rounded-lg">
+                      <div className="flex items-center justify-center gap-1 text-cyan-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping inline-block"></span>
+                        <span>CROSSFADE START MARKER</span>
+                      </div>
+                      <span className="text-slate-200 font-bold text-xs block mt-0.5">Time: {crossfadeStartSec}s</span>
+                      <span className="text-[9px] text-slate-400 block">Mix-Out Cue Initiated</span>
+                    </div>
+
+                    {/* Midpoint / Active Overlap Zone */}
+                    <div className="p-2 bg-amber-950/60 border border-amber-700/60 rounded-lg">
+                      <div className="flex items-center justify-center gap-1 text-amber-400 font-bold">
+                        <Zap className="w-3 h-3 text-amber-400" />
+                        <span>MANDATORY 5s OVERLAP ZONE</span>
+                      </div>
+                      <span className="text-amber-300 font-bold text-xs block mt-0.5">{overlapDurationSec}s Blend Duration</span>
+                      <span className="text-[9px] text-slate-400 block">Sub-Bass EQ Crossover</span>
+                    </div>
+
+                    {/* End Marker */}
+                    <div className="p-2 bg-violet-950/60 border border-violet-700/60 rounded-lg">
+                      <div className="flex items-center justify-center gap-1 text-violet-400 font-bold">
+                        <span className="w-2 h-2 rounded-full bg-violet-400 inline-block"></span>
+                        <span>CROSSFADE END MARKER</span>
+                      </div>
+                      <span className="text-slate-200 font-bold text-xs block mt-0.5">Time: {crossfadeEndSec}s</span>
+                      <span className="text-[9px] text-slate-400 block">Complete Cut to Track B</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Spectral Frequency Overlap Comparison */}
           <div className="p-4 rounded-xl bg-slate-950/80 border border-slate-800 space-y-4">

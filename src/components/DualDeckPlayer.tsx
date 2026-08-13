@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Link,
   Check,
+  ArrowLeft,
 } from 'lucide-react';
 import { Track } from '../types';
 import { analyzeAudioFile, detectFirstDownbeat } from '../lib/audioAnalyzer';
@@ -453,6 +454,15 @@ export const DualDeckPlayer: React.FC<DualDeckPlayerProps> = ({
 
           <div className="flex items-center gap-3">
             <button
+              onClick={onClose}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-cyan-400 font-mono text-xs font-bold transition border border-slate-700 shadow-md"
+              title="Return to Main Set Studio"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              <span>← Back to Studio</span>
+            </button>
+
+            <button
               onClick={() => setIsBeatSynced(!isBeatSynced)}
               className={`px-3 py-1.5 rounded-lg text-xs font-mono font-bold transition flex items-center gap-1.5 border ${
                 isBeatSynced
@@ -468,6 +478,7 @@ export const DualDeckPlayer: React.FC<DualDeckPlayerProps> = ({
             <button
               onClick={onClose}
               className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-slate-200 transition"
+              title="Close"
             >
               <X className="w-5 h-5" />
             </button>
@@ -805,7 +816,7 @@ export const DualDeckPlayer: React.FC<DualDeckPlayerProps> = ({
                 className="px-4 py-2 rounded-lg bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/50 text-xs font-mono font-semibold transition flex items-center gap-2 active:scale-95 shadow-md shadow-cyan-950/30"
               >
                 <Zap className="w-3.5 h-3.5 text-cyan-400" />
-                <span>Simulate Beat-Matched Auto-Crossfade (8 Bars)</span>
+                <span>Simulate 8s Beat-Synced Smooth Mix into Next Track</span>
               </button>
 
               <button
