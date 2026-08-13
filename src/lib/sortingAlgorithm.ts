@@ -1,5 +1,6 @@
 import { BlueprintType, SetBlueprint, SortingParameters, Track, TransitionAnalysis } from '../types';
 import { analyzeTransitionType, getCamelotStepDistance } from './camelot';
+import { getUserSubscriptionTier } from './rbac';
 
 export const BLUEPRINTS: Record<BlueprintType, SetBlueprint> = {
   PEAK_MOUNTAIN: {
@@ -52,30 +53,39 @@ export function getTargetEnergyForStep(stepIndex: number, totalTracks: number, t
  * are heavily favored, while key clashes receive massive penalties.
  * Small BPM delta serves as a smooth tie-breaker.
  */
-function getHarmonicKeyPenalty(prevTrack: Track, candidate: Track): number {
+function getHarmonicKeyPenalty(prevTrack: Track, candidate: Track, isExactOnly: boolean = false): number {
   const stepDist = getCamelotStepDistance(prevTrack.key.number, candidate.key.number);
   const sameLetter = prevTrack.key.letter === candidate.key.letter;
   const sameCode = prevTrack.key.code === candidate.key.code;
 
   let harmonicCost = 0;
 
-  if (sameCode) {
-    harmonicCost = 0; // Exact key match (e.g. 8A -> 8A)
-  } else if (prevTrack.key.number === candidate.key.number && !sameLetter) {
-    harmonicCost = 0.5; // Relative Major / Minor shift (e.g. 8A <-> 8B)
-  } else if (stepDist === 1 && sameLetter) {
-    harmonicCost = 1.0; // Smooth adjacent Camelot step (e.g. 8A -> 9A or 8A -> 7A)
-  } else if (stepDist === 1 && !sameLetter) {
-    harmonicCost = 2.0; // Dominant diagonal (e.g. 8A -> 9B or 8A -> 7B)
-  } else if (stepDist === 2 && sameLetter) {
-    harmonicCost = 3.0; // Energy boost / 2-step Camelot jump (e.g. 8A -> 10A)
-  } else if (stepDist === 7 && sameLetter) {
-    harmonicCost = 3.5; // Semitone boost (+7 steps e.g. 8A -> 3A)
-  } else if (stepDist === 2 && !sameLetter) {
-    harmonicCost = 5.0; // 2-step diagonal jump
+  if (isExactOnly) {
+    // Tier 1 (Free) restricts key sorting to exact Camelot matches only
+    if (sameCode) {
+      harmonicCost = 0; // Exact key match allowed
+    } else {
+      harmonicCost = 100000; // Restricted on Free tier
+    }
   } else {
-    // HARMONIC CLASH (> 2 steps away)
-    harmonicCost = 10000 + stepDist * 1000;
+    if (sameCode) {
+      harmonicCost = 0; // Exact key match (e.g. 8A -> 8A)
+    } else if (prevTrack.key.number === candidate.key.number && !sameLetter) {
+      harmonicCost = 0.5; // Relative Major / Minor shift (e.g. 8A <-> 8B)
+    } else if (stepDist === 1 && sameLetter) {
+      harmonicCost = 1.0; // Smooth adjacent Camelot step (e.g. 8A -> 9A or 8A -> 7A)
+    } else if (stepDist === 1 && !sameLetter) {
+      harmonicCost = 2.0; // Dominant diagonal (e.g. 8A -> 9B or 8A -> 7B)
+    } else if (stepDist === 2 && sameLetter) {
+      harmonicCost = 3.0; // Energy boost / 2-step Camelot jump (e.g. 8A -> 10A)
+    } else if (stepDist === 7 && sameLetter) {
+      harmonicCost = 3.5; // Semitone boost (+7 steps e.g. 8A -> 3A)
+    } else if (stepDist === 2 && !sameLetter) {
+      harmonicCost = 5.0; // 2-step diagonal jump
+    } else {
+      // HARMONIC CLASH (> 2 steps away)
+      harmonicCost = 10000 + stepDist * 1000;
+    }
   }
 
   // Smooth BPM transition tie-breaker (small penalty for tempo differences)
@@ -123,6 +133,9 @@ export function sortPlaylist(
 
   const beamWidth = Math.min(120, Math.max(40, tracks.length * 8));
 
+  const userTier = getUserSubscriptionTier();
+  const isExactOnly = userTier === 'FREE';
+
   // Iteratively extend each path by picking the best in-key candidate
   for (let step = 1; step < N; step++) {
     const nextBeam: PathCandidate[] = [];
@@ -132,7 +145,7 @@ export function sortPlaylist(
 
       for (const candidateId of path.unvisitedIds) {
         const candidate = trackMap.get(candidateId)!;
-        const penalty = getHarmonicKeyPenalty(lastTrack, candidate);
+        const penalty = getHarmonicKeyPenalty(lastTrack, candidate, isExactOnly);
 
         const newUnvisited = new Set(path.unvisitedIds);
         newUnvisited.delete(candidateId);

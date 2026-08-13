@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Compass,
   Download,
@@ -13,10 +13,12 @@ import {
   UserPlus,
   LogIn,
   Shield,
-  User,
+  Crown,
+  Lock,
 } from 'lucide-react';
 import { Crate } from '../types';
 import { Logo } from './Logo';
+import { getUserSubscriptionTier, TIER_DETAILS, SubscriptionTier } from '../lib/rbac';
 
 interface NavbarProps {
   crates: Crate[];
@@ -31,6 +33,7 @@ interface NavbarProps {
   onOpenRegister: () => void;
   onOpenLogin: () => void;
   onOpenAdmin: () => void;
+  onOpenUpgradeModal: () => void;
   activeDJName?: string | null;
   isAdminLoggedIn?: boolean;
   onRunSort: () => void;
@@ -51,18 +54,31 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenRegister,
   onOpenLogin,
   onOpenAdmin,
+  onOpenUpgradeModal,
   activeDJName,
   isAdminLoggedIn,
   onRunSort,
   isSorting,
   trackCount,
 }) => {
-  const activeCrate = crates.find((c) => c.id === activeCrateId);
+  const [userTier, setUserTier] = useState<SubscriptionTier>(getUserSubscriptionTier());
+
+  useEffect(() => {
+    const handleTierChange = () => {
+      setUserTier(getUserSubscriptionTier());
+    };
+    window.addEventListener('subscription_tier_changed', handleTierChange);
+    return () => {
+      window.removeEventListener('subscription_tier_changed', handleTierChange);
+    };
+  }, []);
+
+  const tierDetail = TIER_DETAILS[userTier];
 
   return (
     <header id="app-header" className="sticky top-0 z-40 bg-slate-950/95 backdrop-blur-md border-b border-slate-800/80 px-4 lg:px-8 py-3 transition-all">
       <div className="max-w-7xl mx-auto flex flex-col gap-3 w-full">
-        {/* ROW 1: Branding, Crate Selector, Track Count & Primary File Actions */}
+        {/* ROW 1: Branding, Subscription Badge, Crate Selector & Primary File Actions */}
         <div className="flex flex-col md:flex-row justify-between items-center gap-3 w-full">
           {/* Branding Block */}
           <div className="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
@@ -74,9 +90,29 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <h1 className="text-base sm:text-lg font-bold tracking-wider text-slate-100 font-mono leading-tight">
                     SET ARCHITECT
                   </h1>
-                  <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold tracking-wider text-cyan-400 bg-cyan-950/60 border border-cyan-800/60 rounded-full">
-                    v1.0 EXEC
-                  </span>
+
+                  {/* Tier Badge */}
+                  <button
+                    onClick={onOpenUpgradeModal}
+                    className={`px-2 py-0.5 text-[9px] font-mono font-bold tracking-wider rounded-full border transition flex items-center gap-1 ${
+                      userTier === 'EXECUTIVE'
+                        ? 'bg-amber-950/80 text-amber-300 border-amber-500/80 hover:bg-amber-900/80 shadow-sm shadow-amber-500/20'
+                        : userTier === 'PRO'
+                        ? 'bg-cyan-950/80 text-cyan-300 border-cyan-500/80 hover:bg-cyan-900/80 shadow-sm shadow-cyan-500/20'
+                        : 'bg-slate-900 text-slate-400 border-slate-700 hover:bg-slate-800'
+                    }`}
+                    title="Click to manage subscription plan & feature access"
+                  >
+                    {userTier === 'EXECUTIVE' ? (
+                      <Crown className="w-3 h-3 text-amber-400" />
+                    ) : userTier === 'PRO' ? (
+                      <Zap className="w-3 h-3 text-cyan-400" />
+                    ) : (
+                      <Lock className="w-3 h-3 text-slate-500" />
+                    )}
+                    <span>{tierDetail.badgeLabel}</span>
+                  </button>
+
                   <button
                     onClick={() => {
                       try {
@@ -108,6 +144,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           {/* Crate Selector, Track Count & Primary File Actions */}
           <div className="flex flex-wrap items-center gap-2 sm:gap-3 w-full md:w-auto justify-start md:justify-end">
+            {/* Upgrade Button */}
+            <button
+              onClick={onOpenUpgradeModal}
+              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold font-mono rounded-lg transition border bg-gradient-to-r from-amber-500/20 via-orange-500/20 to-amber-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border-amber-500/50 shadow-md shadow-amber-500/10"
+              title="Manage RBAC Subscription Plan"
+            >
+              <Crown className="w-3.5 h-3.5 text-amber-400" />
+              <span>{userTier === 'FREE' ? 'Upgrade Plan' : 'Manage Tier'}</span>
+            </button>
+
             {/* Crate Selector */}
             <div className="flex items-center gap-2 bg-slate-900 border border-slate-800 rounded-lg px-3 py-1.5 text-xs text-slate-300 max-w-full">
               <Layers className="w-4 h-4 text-cyan-400 shrink-0" />
@@ -124,10 +170,18 @@ export const Navbar: React.FC<NavbarProps> = ({
               </select>
             </div>
 
-            {/* Track Count Pill */}
-            <div className="flex items-center gap-1.5 bg-slate-900/80 border border-slate-800/80 rounded-lg px-2.5 py-1.5 text-xs font-mono text-slate-400">
-              <ListMusic className="w-3.5 h-3.5 text-slate-400" />
-              <span>{trackCount} Tracks</span>
+            {/* Track Count Pill (Shows Free limit warning if near 10) */}
+            <div
+              className={`flex items-center gap-1.5 border rounded-lg px-2.5 py-1.5 text-xs font-mono transition ${
+                userTier === 'FREE' && trackCount >= 10
+                  ? 'bg-amber-950/80 border-amber-500/80 text-amber-300'
+                  : 'bg-slate-900/80 border-slate-800/80 text-slate-400'
+              }`}
+            >
+              <ListMusic className="w-3.5 h-3.5" />
+              <span>
+                {trackCount} {userTier === 'FREE' ? '/ 10 (Free Cap)' : 'Tracks'}
+              </span>
             </div>
 
             {/* Add Track */}
@@ -142,10 +196,16 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Import XML / Crate */}
             <button
               onClick={onOpenImporter}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg transition border border-slate-700/60 whitespace-nowrap"
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition border whitespace-nowrap ${
+                userTier === 'FREE'
+                  ? 'bg-slate-900 text-slate-400 border-slate-800 hover:border-cyan-500/60'
+                  : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700/60'
+              }`}
+              title={userTier === 'FREE' ? 'XML/Crate import requires Pro tier' : 'Import XML or Crate'}
             >
               <FolderOpen className="w-3.5 h-3.5 text-cyan-400" />
               <span>Import XML / Crate</span>
+              {userTier === 'FREE' && <Lock className="w-3 h-3 text-amber-400 ml-0.5" />}
             </button>
           </div>
         </div>
@@ -192,11 +252,16 @@ export const Navbar: React.FC<NavbarProps> = ({
           {onOpenAIMixer && (
             <button
               onClick={onOpenAIMixer}
-              className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black rounded-lg transition shadow-md shadow-cyan-500/20 whitespace-nowrap w-full sm:w-auto"
-              title="Open AI Music Mixer & Set Fit Radar"
+              className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition shadow-md whitespace-nowrap w-full sm:w-auto ${
+                userTier === 'EXECUTIVE'
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-black shadow-cyan-500/20'
+                  : 'bg-slate-900 hover:bg-slate-800 text-slate-300 border border-slate-800'
+              }`}
+              title={userTier !== 'EXECUTIVE' ? 'AI Music Mixer requires Executive tier' : 'Open AI Music Mixer'}
             >
-              <Bot className="w-3.5 h-3.5 stroke-[2.5]" />
+              <Bot className="w-3.5 h-3.5 stroke-[2.5] text-cyan-400" />
               <span>AI Music Mixer</span>
+              {userTier !== 'EXECUTIVE' && <Lock className="w-3 h-3 text-amber-400 ml-0.5" />}
             </button>
           )}
 
@@ -220,11 +285,16 @@ export const Navbar: React.FC<NavbarProps> = ({
 
           <button
             onClick={onOpenExportModal}
-            className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg transition whitespace-nowrap w-full sm:w-auto"
-            title="Export playlist / crate"
+            className={`flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-lg transition whitespace-nowrap w-full sm:w-auto border ${
+              userTier === 'FREE'
+                ? 'bg-slate-900 text-slate-400 border-slate-800'
+                : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+            }`}
+            title={userTier === 'FREE' ? 'Exports require Pro tier' : 'Export playlist / crate'}
           >
             <Download className="w-3.5 h-3.5 text-amber-400" />
             <span>Export</span>
+            {userTier === 'FREE' && <Lock className="w-3 h-3 text-amber-400 ml-0.5" />}
           </button>
 
           <button
@@ -235,7 +305,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 ? 'bg-slate-800 text-slate-500 cursor-not-allowed border border-slate-700'
                 : 'bg-gradient-to-r from-cyan-500 via-blue-600 to-violet-600 hover:from-cyan-400 hover:to-violet-500 text-white border border-cyan-400/40'
             }`}
-            title="Run harmonic auto-sort algorithm on set"
+            title={userTier === 'FREE' ? 'Auto-Sorting in Exact-Match Camelot mode (Tier 1)' : 'Run harmonic auto-sort algorithm'}
           >
             <Sparkles className={`w-3.5 h-3.5 ${isSorting ? 'animate-spin' : ''}`} />
             <span>{isSorting ? 'Sorting...' : 'Auto-Sort Set'}</span>

@@ -5,22 +5,30 @@ import {
   FolderPlus,
   X,
   Sparkles,
+  Lock,
+  Crown,
 } from 'lucide-react';
 import { Track } from '../types';
 import { parseRekordboxXml } from '../lib/exporters';
 import { analyzeAudioFile } from '../lib/audioAnalyzer';
+import { getUserSubscriptionTier, checkPermissionGuard, FeaturePermission } from '../lib/rbac';
 
 interface AudioImporterModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAddTracks: (tracks: Track[], crateName?: string) => void;
+  onTriggerUpgrade?: (feature: FeaturePermission) => void;
+  currentTrackCount?: number;
 }
 
 export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
   isOpen,
   onClose,
   onAddTracks,
+  onTriggerUpgrade,
+  currentTrackCount = 0,
 }) => {
+  const userTier = getUserSubscriptionTier();
   const [activeTab, setActiveTab] = useState<'FILES' | 'XML'>('FILES');
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMessage, setStatusMessage] = useState('');
@@ -34,6 +42,14 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
   const handleAudioFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files || files.length === 0) return;
+
+    // Free tier max 10 tracks check
+    if (userTier === 'FREE' && currentTrackCount + files.length > 10) {
+      if (onTriggerUpgrade) {
+        onTriggerUpgrade('UNLIMITED_TRACKS');
+      }
+      return;
+    }
 
     setIsProcessing(true);
     setStatusMessage(`Analyzing ${files.length} audio file(s) via Web Audio API...`);
@@ -76,6 +92,13 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
 
   // Rekordbox XML Upload
   const handleXmlUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (userTier === 'FREE') {
+      if (onTriggerUpgrade) {
+        onTriggerUpgrade('XML_CRATE_IMPORT');
+      }
+      return;
+    }
+
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -181,6 +204,28 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
 
           {activeTab === 'XML' && (
             <div className="space-y-4">
+              {userTier === 'FREE' && (
+                <div className="p-4 rounded-xl bg-amber-950/80 border border-amber-500/80 text-amber-200 flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <Lock className="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                      <h4 className="text-xs font-bold font-mono text-amber-300 uppercase">
+                        Pro Tier Feature Locked
+                      </h4>
+                      <p className="text-xs text-amber-200/90 mt-0.5">
+                        Rekordbox XML & Serato .crate imports require Pro (R179/mo) or Executive tier.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => onTriggerUpgrade && onTriggerUpgrade('XML_CRATE_IMPORT')}
+                    className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs shrink-0"
+                  >
+                    Upgrade
+                  </button>
+                </div>
+              )}
+
               <input
                 type="file"
                 ref={xmlInputRef}
@@ -190,15 +235,21 @@ export const AudioImporterModal: React.FC<AudioImporterModalProps> = ({
               />
 
               <div
-                onClick={() => xmlInputRef.current?.click()}
+                onClick={() => {
+                  if (userTier === 'FREE') {
+                    if (onTriggerUpgrade) onTriggerUpgrade('XML_CRATE_IMPORT');
+                  } else {
+                    xmlInputRef.current?.click();
+                  }
+                }}
                 className="border-2 border-dashed border-slate-800 hover:border-cyan-500/80 bg-slate-950/60 hover:bg-cyan-950/20 rounded-2xl p-8 text-center cursor-pointer transition-all space-y-3 group"
               >
                 <div className="w-12 h-12 rounded-full bg-slate-900 border border-slate-800 group-hover:border-cyan-500/80 flex items-center justify-center mx-auto text-cyan-400 transition-colors">
-                  <FileCode className="w-6 h-6" />
+                  {userTier === 'FREE' ? <Lock className="w-6 h-6 text-amber-400" /> : <FileCode className="w-6 h-6" />}
                 </div>
                 <div>
                   <h4 className="text-sm font-bold text-slate-200">
-                    Import Rekordbox XML Playlist
+                    {userTier === 'FREE' ? 'Import Rekordbox XML Playlist (Pro Tier)' : 'Import Rekordbox XML Playlist'}
                   </h4>
                   <p className="text-xs text-slate-500 mt-1 font-mono">
                     Parses track grid, BPM, Tonality tags, hot cues, and tempo markers

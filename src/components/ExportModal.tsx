@@ -9,6 +9,7 @@ import {
   Copy,
   Sparkles,
   Zap,
+  Lock,
 } from 'lucide-react';
 import { Track, TransitionAnalysis } from '../types';
 import {
@@ -16,6 +17,7 @@ import {
   generateRekordboxXml,
   generateTransitionSheet,
 } from '../lib/exporters';
+import { getUserSubscriptionTier, FeaturePermission } from '../lib/rbac';
 
 interface ExportModalProps {
   isOpen: boolean;
@@ -24,6 +26,7 @@ interface ExportModalProps {
   transitions: TransitionAnalysis[];
   blueprintName: string;
   onOpenCreateTransitionsModal?: () => void;
+  onTriggerUpgrade?: (feature: FeaturePermission) => void;
 }
 
 export const ExportModal: React.FC<ExportModalProps> = ({
@@ -33,13 +36,19 @@ export const ExportModal: React.FC<ExportModalProps> = ({
   transitions,
   blueprintName,
   onOpenCreateTransitionsModal,
+  onTriggerUpgrade,
 }) => {
   const [copied, setCopied] = useState(false);
+  const userTier = getUserSubscriptionTier();
 
   if (!isOpen) return null;
 
   // Trigger file download helper
   const downloadFile = (content: string, fileName: string, contentType: string) => {
+    if (userTier === 'FREE') {
+      if (onTriggerUpgrade) onTriggerUpgrade('PLAYLIST_EXPORTS');
+      return;
+    }
     const blob = new Blob([content], { type: contentType });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -102,6 +111,27 @@ export const ExportModal: React.FC<ExportModalProps> = ({
 
         {/* Export Options Grid */}
         <div className="py-6 space-y-4">
+          {userTier === 'FREE' && (
+            <div className="p-4 rounded-xl bg-amber-950/80 border border-amber-500/80 text-amber-200 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <Lock className="w-5 h-5 text-amber-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold font-mono text-amber-300 uppercase">
+                    Pro Tier Required
+                  </h4>
+                  <p className="text-xs text-amber-200/90 mt-0.5">
+                    Direct playlist exports (M3U, Rekordbox XML, CSV) require Pro (R179/mo) or Executive tier.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => onTriggerUpgrade && onTriggerUpgrade('PLAYLIST_EXPORTS')}
+                className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-black font-mono font-bold text-xs shrink-0"
+              >
+                Upgrade
+              </button>
+            </div>
+          )}
           {/* Pre-recorded Continuous Set WAV */}
           {onOpenCreateTransitionsModal && (
             <div

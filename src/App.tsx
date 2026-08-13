@@ -16,12 +16,14 @@ import { AIMusicMixerModal } from './components/AIMusicMixerModal';
 import { ExportModal } from './components/ExportModal';
 import { DJRegistrationModal } from './components/DJRegistrationModal';
 import { AdminModal } from './components/AdminModal';
+import { UpgradeModal } from './components/UpgradeModal';
 import { Upload, Sparkles } from 'lucide-react';
 
 import { BlueprintType, Crate, DJRegistration, SortingParameters, Track } from './types';
 import { sortPlaylist, BLUEPRINTS } from './lib/sortingAlgorithm';
 import { analyzeAudioFile } from './lib/audioAnalyzer';
 import { parseRekordboxXml } from './lib/exporters';
+import { getUserSubscriptionTier, FeaturePermission, checkPermissionGuard, hasPermission } from './lib/rbac';
 
 const INITIAL_CRATES: Crate[] = [
   {
@@ -81,6 +83,34 @@ export default function App() {
   const [selectedTransitionIdx, setSelectedTransitionIdx] = useState<number | null>(null);
   const [deckATrack, setDeckATrack] = useState<Track | null>(null);
   const [deckBTrack, setDeckBTrack] = useState<Track | null>(null);
+
+  const [isUpgradeOpen, setIsUpgradeOpen] = useState(false);
+  const [upgradeRequiredFeature, setUpgradeRequiredFeature] = useState<FeaturePermission | null>(null);
+
+  const handleOpenUpgradeModal = (feature?: FeaturePermission) => {
+    setUpgradeRequiredFeature(feature || null);
+    setIsUpgradeOpen(true);
+  };
+
+  const handleOpenAIMixerWithGuard = () => {
+    if (!hasPermission('AI_MIXER')) {
+      handleOpenUpgradeModal('AI_MIXER');
+      return;
+    }
+    setIsAIMixerOpen(true);
+  };
+
+  const handleOpenExportWithGuard = () => {
+    if (!hasPermission('PLAYLIST_EXPORTS')) {
+      handleOpenUpgradeModal('PLAYLIST_EXPORTS');
+      return;
+    }
+    setIsExportOpen(true);
+  };
+
+  const handleOpenImporterWithGuard = () => {
+    setIsImporterOpen(true);
+  };
 
   // When active crate changes, update local tracks
   useEffect(() => {
@@ -153,6 +183,22 @@ export default function App() {
 
   // Add imported tracks & auto-sort into optimal set sequence
   const handleAddTracks = useCallback((newTracks: Track[], crateName?: string) => {
+    const tier = getUserSubscriptionTier();
+    
+    if (tier === 'FREE') {
+      const currentCount = tracks.length;
+      if (currentCount >= 10) {
+        handleOpenUpgradeModal('UNLIMITED_TRACKS');
+        return;
+      }
+      if (currentCount + newTracks.length > 10) {
+        handleOpenUpgradeModal('UNLIMITED_TRACKS');
+        // Limit to remaining capacity for Free tier
+        const allowedCount = Math.max(0, 10 - currentCount);
+        newTracks = newTracks.slice(0, allowedCount);
+      }
+    }
+
     if (crateName) {
       const newCrateId = `crate-${Date.now()}`;
       const { sortedTracks } = sortPlaylist(
@@ -184,7 +230,7 @@ export default function App() {
         return sortedTracks;
       });
     }
-  }, [selectedBlueprint, params, customCurve]);
+  }, [tracks.length, selectedBlueprint, params, customCurve]);
 
   // Process uploaded audio or XML files directly
   const handleUploadAudioFiles = useCallback(async (filesList: FileList | File[]) => {
@@ -336,12 +382,12 @@ export default function App() {
         crates={crates}
         activeCrateId={activeCrateId}
         onSelectCrate={(id) => setActiveCrateId(id)}
-        onOpenImporter={() => setIsImporterOpen(true)}
+        onOpenImporter={handleOpenImporterWithGuard}
         onOpenAddTrackModal={() => setIsAddTrackOpen(true)}
         onOpenCamelotWheel={() => setIsCamelotOpen(true)}
-        onOpenExportModal={() => setIsExportOpen(true)}
+        onOpenExportModal={handleOpenExportWithGuard}
         onOpenDualDeck={() => setIsDualDeckOpen(true)}
-        onOpenAIMixer={() => setIsAIMixerOpen(true)}
+        onOpenAIMixer={handleOpenAIMixerWithGuard}
         onOpenRegister={() => {
           setDjModalTab('REGISTER');
           setIsDJRegistrationOpen(true);
@@ -351,6 +397,7 @@ export default function App() {
           setIsDJRegistrationOpen(true);
         }}
         onOpenAdmin={() => setIsAdminOpen(true)}
+        onOpenUpgradeModal={() => handleOpenUpgradeModal()}
         activeDJName={activeDJ?.djName}
         isAdminLoggedIn={isAdminAuthenticated}
         onRunSort={handleRunSort}
@@ -393,7 +440,7 @@ export default function App() {
           onOpenAddTrackModal={() => setIsAddTrackOpen(true)}
           onOpenCreateTransitionsModal={handleOpenCreateMix}
           onOpenCreateMashupModal={handleOpenMashupModal}
-          onOpenAIMixer={() => setIsAIMixerOpen(true)}
+          onOpenAIMixer={handleOpenAIMixerWithGuard}
           onUploadAudioFiles={handleUploadAudioFiles}
         />
       </main>
@@ -467,6 +514,8 @@ export default function App() {
         isOpen={isImporterOpen}
         onClose={() => setIsImporterOpen(false)}
         onAddTracks={handleAddTracks}
+        onTriggerUpgrade={(feat) => handleOpenUpgradeModal(feat)}
+        currentTrackCount={tracks.length}
       />
 
       <ExportModal
@@ -476,6 +525,17 @@ export default function App() {
         transitions={transitions}
         blueprintName={BLUEPRINTS[selectedBlueprint].name}
         onOpenCreateTransitionsModal={handleOpenCreateMix}
+        onTriggerUpgrade={(feat) => handleOpenUpgradeModal(feat)}
+      />
+
+      <UpgradeModal
+        isOpen={isUpgradeOpen}
+        onClose={() => setIsUpgradeOpen(false)}
+        requiredFeature={upgradeRequiredFeature}
+        onTierChanged={() => {
+          // Trigger re-render / state sync
+          window.dispatchEvent(new Event('subscription_tier_changed'));
+        }}
       />
 
       <DJRegistrationModal
