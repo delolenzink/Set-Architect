@@ -14,6 +14,7 @@ import { CreateTransitionsModal } from './components/CreateTransitionsModal';
 import { CreateMashupModal } from './components/CreateMashupModal';
 import { AIMusicMixerModal } from './components/AIMusicMixerModal';
 import { ExportModal } from './components/ExportModal';
+import { ExportSetModal } from './components/ExportSetModal';
 import { DJRegistrationModal } from './components/DJRegistrationModal';
 import { AdminModal } from './components/AdminModal';
 import { UpgradeModal } from './components/UpgradeModal';
@@ -518,13 +519,12 @@ export default function App() {
         currentTrackCount={tracks.length}
       />
 
-      <ExportModal
+      <ExportSetModal
         isOpen={isExportOpen}
         onClose={() => setIsExportOpen(false)}
         tracks={tracks}
         transitions={transitions}
         blueprintName={BLUEPRINTS[selectedBlueprint].name}
-        onOpenCreateTransitionsModal={handleOpenCreateMix}
         onTriggerUpgrade={(feat) => handleOpenUpgradeModal(feat)}
       />
 

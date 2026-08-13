@@ -17,6 +17,9 @@ import {
   AlertTriangle,
   LogOut,
   RefreshCw,
+  Building2,
+  CreditCard,
+  CheckCheck,
 } from 'lucide-react';
 import { DJRegistration } from '../types';
 import {
@@ -24,6 +27,13 @@ import {
   updateRegistrationStatus,
   deleteRegistration,
 } from '../lib/djRegistrationStore';
+import {
+  ManualPayment,
+  getManualPayments,
+  updateManualPaymentStatus,
+  deleteManualPayment,
+} from '../lib/manualPaymentsStore';
+import { setUserSubscriptionTier } from '../lib/rbac';
 
 interface AdminModalProps {
   isOpen: boolean;
@@ -51,9 +61,10 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   // Admin Dashboard State
   const [registrations, setRegistrations] = useState<DJRegistration[]>([]);
+  const [manualPaymentsList, setManualPaymentsList] = useState<ManualPayment[]>([]);
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'DECLINED'>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<'DJS' | 'SYSTEM'>('DJS');
+  const [activeTab, setActiveTab] = useState<'DJS' | 'PAYMENTS' | 'SYSTEM'>('DJS');
 
   // Modal for decline reason
   const [declineTargetId, setDeclineTargetId] = useState<string | null>(null);
@@ -62,6 +73,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setRegistrations(getDJRegistrations());
+      setManualPaymentsList(getManualPayments());
     }
   }, [isOpen]);
 
@@ -74,6 +86,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     if (usernameInput.trim() === 'admin' && passwordInput === 'MouseNapolean2025#') {
       onAdminLogin(true);
       setRegistrations(getDJRegistrations());
+      setManualPaymentsList(getManualPayments());
       setUsernameInput('');
       setPasswordInput('');
     } else {
@@ -81,12 +94,12 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     }
   };
 
-  const handleApprove = (id: string) => {
+  const handleApproveDJ = (id: string) => {
     const updated = updateRegistrationStatus(id, 'APPROVED');
     setRegistrations(updated);
   };
 
-  const handleDeclineConfirm = (e: React.FormEvent) => {
+  const handleDeclineDJConfirm = (e: React.FormEvent) => {
     e.preventDefault();
     if (!declineTargetId) return;
     const updated = updateRegistrationStatus(
@@ -99,10 +112,31 @@ export const AdminModal: React.FC<AdminModalProps> = ({
     setDeclineReasonInput('');
   };
 
-  const handleDelete = (id: string) => {
+  const handleDeleteDJ = (id: string) => {
     if (window.confirm('Are you sure you want to delete this DJ registration record?')) {
       const updated = deleteRegistration(id);
       setRegistrations(updated);
+    }
+  };
+
+  // Payment Verification Handlers
+  const handleApprovePayment = (payment: ManualPayment) => {
+    const updated = updateManualPaymentStatus(payment.id, 'approved', 'Confirmed receipt by admin');
+    setManualPaymentsList(updated);
+    // Instantly activate subscription tier for current session
+    setUserSubscriptionTier(payment.tierRequested);
+    alert(`EFT Payment verified! Activated ${payment.tierRequested} tier for ${payment.userName} (${payment.userEmail}).`);
+  };
+
+  const handleRejectPayment = (paymentId: string) => {
+    const updated = updateManualPaymentStatus(paymentId, 'rejected', 'Payment not received or invalid reference');
+    setManualPaymentsList(updated);
+  };
+
+  const handleDeletePayment = (paymentId: string) => {
+    if (window.confirm('Delete this payment verification record?')) {
+      const updated = deleteManualPayment(paymentId);
+      setManualPaymentsList(updated);
     }
   };
 
@@ -143,7 +177,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
   const pendingCount = registrations.filter((r) => r.status === 'PENDING').length;
   const approvedCount = registrations.filter((r) => r.status === 'APPROVED').length;
-  const declinedCount = registrations.filter((r) => r.status === 'DECLINED').length;
+  const pendingEftCount = manualPaymentsList.filter((p) => p.status === 'pending_verification').length;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fadeIn">
@@ -164,7 +198,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 )}
               </h2>
               <p className="text-xs text-slate-400">
-                Monitor live app usage, review DJ registrations, and manage approvals
+                Monitor live app usage, review DJ registrations, and verify manual EFT payments
               </p>
             </div>
           </div>
@@ -252,7 +286,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
               <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 bg-amber-950/10">
                 <div className="flex items-center justify-between text-amber-400 text-[10px] font-mono">
-                  <span>PENDING</span>
+                  <span>PENDING DJs</span>
                   <Clock className="w-3.5 h-3.5 text-amber-400 animate-pulse" />
                 </div>
                 <div className="text-2xl font-bold font-mono text-amber-400 mt-1">
@@ -260,23 +294,23 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                 </div>
               </div>
 
+              <div className="p-3.5 rounded-xl bg-slate-950 border border-amber-500/30 bg-amber-950/20">
+                <div className="flex items-center justify-between text-amber-300 text-[10px] font-mono">
+                  <span>PENDING EFT PAYMENTS</span>
+                  <Building2 className="w-3.5 h-3.5 text-amber-400 animate-bounce" />
+                </div>
+                <div className="text-2xl font-bold font-mono text-amber-300 mt-1">
+                  {pendingEftCount}
+                </div>
+              </div>
+
               <div className="p-3.5 rounded-xl bg-slate-950 border border-emerald-500/30 bg-emerald-950/10">
                 <div className="flex items-center justify-between text-emerald-400 text-[10px] font-mono">
-                  <span>APPROVED</span>
+                  <span>APPROVED DJs</span>
                   <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
                 </div>
                 <div className="text-2xl font-bold font-mono text-emerald-400 mt-1">
                   {approvedCount}
-                </div>
-              </div>
-
-              <div className="p-3.5 rounded-xl bg-slate-950 border border-red-500/30 bg-red-950/10">
-                <div className="flex items-center justify-between text-red-400 text-[10px] font-mono">
-                  <span>DECLINED</span>
-                  <XCircle className="w-3.5 h-3.5 text-red-400" />
-                </div>
-                <div className="text-2xl font-bold font-mono text-red-400 mt-1">
-                  {declinedCount}
                 </div>
               </div>
 
@@ -293,7 +327,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
 
             {/* Navigation Tabs & Actions */}
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pb-2 border-b border-slate-800">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <button
                   onClick={() => setActiveTab('DJS')}
                   className={`px-4 py-2 text-xs font-mono font-bold rounded-xl transition flex items-center gap-2 ${
@@ -303,7 +337,22 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                   }`}
                 >
                   <Users className="w-3.5 h-3.5" />
-                  <span>DJ Registrations ({registrations.length})</span>
+                  <span>DJ Roster ({registrations.length})</span>
+                </button>
+
+                <button
+                  onClick={() => setActiveTab('PAYMENTS')}
+                  className={`px-4 py-2 text-xs font-mono font-bold rounded-xl transition flex items-center gap-2 relative ${
+                    activeTab === 'PAYMENTS'
+                      ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20'
+                      : 'bg-slate-800 text-slate-300 hover:bg-slate-700'
+                  }`}
+                >
+                  <Building2 className="w-3.5 h-3.5" />
+                  <span>Manual EFT Verifications ({manualPaymentsList.length})</span>
+                  {pendingEftCount > 0 && (
+                    <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping absolute -top-1 -right-1" />
+                  )}
                 </button>
 
                 <button
@@ -423,11 +472,11 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             </div>
                           </div>
 
-                          {/* Approve / Decline / Delete Controls */}
+                          {/* Approve / Decline Controls */}
                           <div className="flex items-center gap-2 pt-2 sm:pt-0">
                             {dj.status !== 'APPROVED' && (
                               <button
-                                onClick={() => handleApprove(dj.id)}
+                                onClick={() => handleApproveDJ(dj.id)}
                                 className="flex items-center gap-1 px-3 py-1.5 text-xs font-mono font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition shadow-md shadow-emerald-500/20"
                                 title="Approve DJ Registration"
                               >
@@ -451,7 +500,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             )}
 
                             <button
-                              onClick={() => handleDelete(dj.id)}
+                              onClick={() => handleDeleteDJ(dj.id)}
                               className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-lg transition"
                               title="Delete DJ Record"
                             >
@@ -460,7 +509,6 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                           </div>
                         </div>
 
-                        {/* DJ Details */}
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs font-mono text-slate-300 bg-slate-900/50 p-3 rounded-lg">
                           <div>
                             <span className="text-slate-500 block text-[10px]">PREFERRED GENRES:</span>
@@ -475,24 +523,140 @@ export const AdminModal: React.FC<AdminModalProps> = ({
                             <span>{new Date(dj.createdAt).toLocaleString()}</span>
                           </div>
                         </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-                        {dj.mixUrl && (
-                          <div className="text-xs font-mono">
-                            <span className="text-slate-500">Mix/Profile Link: </span>
-                            <a
-                              href={dj.mixUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="text-cyan-400 underline hover:text-cyan-300"
-                            >
-                              {dj.mixUrl}
-                            </a>
+            {/* Tab 2: Manual EFT Payments Manager */}
+            {activeTab === 'PAYMENTS' && (
+              <div className="space-y-4 font-mono text-xs">
+                <div className="p-4 rounded-xl bg-slate-950 border border-amber-500/40 text-amber-200 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Building2 className="w-5 h-5 text-amber-400 shrink-0" />
+                    <div>
+                      <h4 className="font-bold text-amber-300">MANUAL EFT PAYMENTS COLLECTION (Capitec Bank)</h4>
+                      <p className="text-[11px] text-amber-200/80">
+                        Review offline Capitec Bank transfers. Confirming receipt approves the record and activates the requested subscription tier instantly.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setManualPaymentsList(getManualPayments())}
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500 text-black font-bold rounded-lg hover:bg-amber-400 transition shrink-0"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" />
+                    <span>Refresh List</span>
+                  </button>
+                </div>
+
+                {manualPaymentsList.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-950 border border-slate-800 rounded-2xl text-slate-500">
+                    No manual payment verification records found in <code className="text-amber-400">manual_payments</code>.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {manualPaymentsList.map((payment) => (
+                      <div
+                        key={payment.id}
+                        className={`p-4 rounded-xl bg-slate-950 border transition space-y-3 ${
+                          payment.status === 'pending_verification'
+                            ? 'border-amber-500/60 shadow-lg shadow-amber-500/10'
+                            : payment.status === 'approved'
+                            ? 'border-emerald-500/40'
+                            : 'border-red-500/40'
+                        }`}
+                      >
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 rounded-xl bg-slate-900 border border-slate-800 text-amber-400 font-bold text-sm">
+                              EFT
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-bold text-slate-100">
+                                  {payment.userName}
+                                </h4>
+                                {payment.status === 'pending_verification' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-bold bg-amber-500/20 text-amber-400 border border-amber-500/40 rounded-full animate-pulse">
+                                    PENDING VERIFICATION
+                                  </span>
+                                )}
+                                {payment.status === 'approved' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 rounded-full">
+                                    VERIFIED & ACTIVATED
+                                  </span>
+                                )}
+                                {payment.status === 'rejected' && (
+                                  <span className="px-2 py-0.5 text-[9px] font-bold bg-red-500/20 text-red-400 border border-red-500/40 rounded-full">
+                                    REJECTED
+                                  </span>
+                                )}
+                              </div>
+                              <p className="text-xs text-slate-400">
+                                {payment.userEmail} • Ref: <strong className="text-amber-300">{payment.referenceCode}</strong>
+                              </p>
+                            </div>
                           </div>
-                        )}
 
-                        {dj.status === 'DECLINED' && dj.declineReason && (
-                          <div className="text-xs font-mono text-red-300 bg-red-950/30 p-2 rounded-lg border border-red-900/40">
-                            <strong>Decline Reason:</strong> {dj.declineReason}
+                          {/* Approval / Rejection Controls */}
+                          <div className="flex items-center gap-2 pt-2 sm:pt-0">
+                            {payment.status !== 'approved' && (
+                              <button
+                                onClick={() => handleApprovePayment(payment)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold bg-emerald-500 hover:bg-emerald-400 text-black rounded-lg transition shadow-md shadow-emerald-500/20"
+                                title="Confirm Receipt & Activate Tier"
+                              >
+                                <CheckCheck className="w-3.5 h-3.5 stroke-[3]" />
+                                <span>CONFIRM & ACTIVATE</span>
+                              </button>
+                            )}
+
+                            {payment.status !== 'rejected' && (
+                              <button
+                                onClick={() => handleRejectPayment(payment.id)}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-800/80 rounded-lg transition"
+                                title="Reject EFT Verification"
+                              >
+                                <XCircle className="w-3.5 h-3.5" />
+                                <span>REJECT</span>
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() => handleDeletePayment(payment.id)}
+                              className="p-1.5 text-slate-500 hover:text-red-400 hover:bg-slate-900 rounded-lg transition"
+                              title="Delete Record"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs text-slate-300 bg-slate-900/50 p-3 rounded-lg">
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">REQUESTED TIER:</span>
+                            <span className="text-cyan-400 font-bold">{payment.tierRequested}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">AMOUNT / CYCLE:</span>
+                            <span className="text-emerald-400 font-bold">{payment.amount} ({payment.billingCycle})</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">SUBMISSION DATE:</span>
+                            <span>{new Date(payment.createdAt).toLocaleString()}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-500 block text-[10px]">BANK DETAILS:</span>
+                            <span>Capitec (2516239218)</span>
+                          </div>
+                        </div>
+
+                        {payment.notes && (
+                          <div className="text-[11px] text-slate-400 bg-slate-900 p-2 rounded-lg border border-slate-800">
+                            <strong>Note:</strong> {payment.notes}
                           </div>
                         )}
                       </div>
@@ -502,7 +666,7 @@ export const AdminModal: React.FC<AdminModalProps> = ({
               </div>
             )}
 
-            {/* Tab 2: System & Session Monitor */}
+            {/* Tab 3: System & Session Monitor */}
             {activeTab === 'SYSTEM' && (
               <div className="space-y-4 font-mono text-xs text-slate-300">
                 <div className="p-5 rounded-2xl bg-slate-950 border border-slate-800 space-y-3">
@@ -565,31 +729,31 @@ export const AdminModal: React.FC<AdminModalProps> = ({
         {/* Decline Reason Modal Dialog */}
         {declineTargetId && (
           <div className="fixed inset-0 z-60 bg-black/80 flex items-center justify-center p-4">
-            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-md w-full space-y-4">
-              <h3 className="text-sm font-bold text-slate-100 font-mono">
+            <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 max-w-md w-full space-y-4 font-mono">
+              <h3 className="text-sm font-bold text-slate-100">
                 DECLINE DJ REGISTRATION
               </h3>
               <p className="text-xs text-slate-400">
                 Specify a reason for declining this DJ application (optional):
               </p>
-              <form onSubmit={handleDeclineConfirm} className="space-y-3">
+              <form onSubmit={handleDeclineDJConfirm} className="space-y-3">
                 <textarea
                   value={declineReasonInput}
                   onChange={(e) => setDeclineReasonInput(e.target.value)}
                   placeholder="e.g. Incomplete profile or genre outside focus"
-                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-red-500 transition h-24 font-mono"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-xs text-slate-100 placeholder-slate-600 focus:outline-none focus:border-red-500 transition h-24"
                 />
                 <div className="flex justify-end gap-2">
                   <button
                     type="button"
                     onClick={() => setDeclineTargetId(null)}
-                    className="px-3 py-1.5 text-xs font-mono text-slate-400 hover:text-slate-200"
+                    className="px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200"
                   >
                     Cancel
                   </button>
                   <button
                     type="submit"
-                    className="px-4 py-1.5 text-xs font-mono font-bold bg-red-500 text-white rounded-lg hover:bg-red-400 transition"
+                    className="px-4 py-1.5 text-xs font-bold bg-red-500 text-white rounded-lg hover:bg-red-400 transition"
                   >
                     Confirm Decline
                   </button>
